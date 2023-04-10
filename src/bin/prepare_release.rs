@@ -61,11 +61,12 @@ fn main() {
     for target_to_prepare in targets_to_prepare {
         update_buildpack_version_and_changelog(target_to_prepare, &next_version);
     }
-
-    env::set_var(
-        "GITHUB_OUTPUT",
-        format!("from_version={current_version} to_version={next_version}"),
-    )
+    //
+    // env::set_var(
+    //     "GITHUB_OUTPUT",
+    //     format!("from_version={current_version} to_version={next_version}"),
+    // );
+    println!("{}", env::var("GITHUB_OUTPUT").unwrap());
 }
 
 fn find_directories_containing_a_buildpack_and_changelog(
