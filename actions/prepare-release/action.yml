@@ -30,10 +30,3 @@ runs:
         cd ${{ github.action_path }}
         cargo run --bin prepare_release -- --bump ${{ inputs.bump }} ${{ github.workspace }}
       shell: bash
-    - name: Check output
-      shell: bash
-      run: |
-        echo "From:"
-        echo ${{ steps.prepare.from_version }}
-        echo "To:"
-        echo ${{ steps.prepare.to_version }}

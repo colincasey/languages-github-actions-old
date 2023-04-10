@@ -307,7 +307,7 @@ fn update_buildpack_toml(buildpack_toml: &BuildpackToml, version: &Version) {
         &buildpack_toml.contents[buildpack_toml.current_version_location.end_byte..]
     );
 
-    if let Err(error) = fs::write(&buildpack_toml.path, new_contents) {
+    if let Err(error) = write(&buildpack_toml.path, new_contents) {
         fail_with_error(format!(
             "Could not write to {}: {error}",
             &buildpack_toml.path.to_string_lossy()
