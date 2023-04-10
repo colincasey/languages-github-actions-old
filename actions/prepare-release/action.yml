@@ -1,0 +1,37 @@
+name: Prepare Buildpack Release
+description: "Prepares a buildpack release by bumping the fixed version and updating changelogs"
+
+inputs:
+  bump:
+    required: true
+
+outputs:
+  from_version:
+    value: ${{ steps.prepare.from_version }}
+  to_version:
+    value: ${{ steps.prepare.to_version }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Checkout Repo
+      uses: actions/checkout@v3
+    - id: install-rust-toolchain
+      name: Install Rust Toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+    - name: Rust cache
+      uses: Swatinem/rust-cache@v2
+    - id: prepare
+      name: Prepare Release
+      run: cargo run --bin prepare_release -- --bump ${{ inputs.bump }}
+      shell: bash
+    - name: Check output
+      shell: bash
+      run: |
+        echo "From:"
+        echo ${{ steps.prepare.from_version }}
+        echo "To:"
+        echo ${{ steps.prepare.to_version }}
