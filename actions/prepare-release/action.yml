@@ -7,9 +7,9 @@ inputs:
 
 outputs:
   from_version:
-    value: ${{ steps.prepare.from_version }}
+    value: ${{ steps.prepare.outputs.from_version }}
   to_version:
-    value: ${{ steps.prepare.to_version }}
+    value: ${{ steps.prepare.outputs.to_version }}
 
 runs:
   using: "composite"
