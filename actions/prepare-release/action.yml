@@ -26,7 +26,9 @@ runs:
       uses: Swatinem/rust-cache@v2
     - id: prepare
       name: Prepare Release
-      run: cargo run --bin prepare_release -- --bump ${{ inputs.bump }}
+      run: |
+        cd ${{ github.action_path }}
+        cargo run --bin prepare_release -- --bump ${{ inputs.bump }} ${{ github.workspace }}
       shell: bash
     - name: Check output
       shell: bash

@@ -19,6 +19,7 @@ const UNSPECIFIED_ERROR: i32 = 1;
 struct Args {
     #[arg(long, value_enum)]
     bump: VersionCoordinate,
+    project_dir: String,
 }
 
 #[derive(ValueEnum, Debug, Clone)]
@@ -51,7 +52,8 @@ struct ChangelogMarkdown {
 
 fn main() {
     let args = Args::parse();
-    let targets_to_prepare = find_directories_containing_a_buildpack_and_changelog();
+    let targets_to_prepare =
+        find_directories_containing_a_buildpack_and_changelog(args.project_dir);
 
     let current_version = get_fixed_version(&targets_to_prepare);
     let next_version = calculate_next_version(current_version.clone(), args.bump);
@@ -66,12 +68,14 @@ fn main() {
     )
 }
 
-fn find_directories_containing_a_buildpack_and_changelog() -> Vec<TargetToPrepare> {
+fn find_directories_containing_a_buildpack_and_changelog(
+    project_dir: String,
+) -> Vec<TargetToPrepare> {
     eprintln!("{LOOKING_GLASS} Looking for Buildpacks & Changelogs");
-    let current_dir = get_current_dir();
+    let project_dir = PathBuf::from(project_dir);
 
     let buildpack_dirs: HashSet<_> =
-        match glob(&current_dir.join("**/buildpack.toml").to_string_lossy()) {
+        match glob(&project_dir.join("**/buildpack.toml").to_string_lossy()) {
             Ok(paths) => paths
                 .filter_map(Result::ok)
                 .map(|path| parent_dir(&path))
@@ -79,14 +83,14 @@ fn find_directories_containing_a_buildpack_and_changelog() -> Vec<TargetToPrepar
             Err(error) => {
                 fail_with_error(format!(
                     "Failed to glob buildpack.toml files in {}: {}",
-                    current_dir.to_string_lossy(),
+                    project_dir.to_string_lossy(),
                     error
                 ));
             }
         };
 
     let changelog_dirs: HashSet<_> =
-        match glob(&current_dir.join("**/CHANGELOG.md").to_string_lossy()) {
+        match glob(&project_dir.join("**/CHANGELOG.md").to_string_lossy()) {
             Ok(paths) => paths
                 .filter_map(Result::ok)
                 .map(|path| parent_dir(&path))
@@ -94,7 +98,7 @@ fn find_directories_containing_a_buildpack_and_changelog() -> Vec<TargetToPrepar
             Err(error) => {
                 fail_with_error(format!(
                     "Failed to glob CHANGELOG.md files in {}: {}",
-                    current_dir.to_string_lossy(),
+                    project_dir.to_string_lossy(),
                     error
                 ));
             }
@@ -311,15 +315,6 @@ fn update_changelog_md(_changelog_md: &ChangelogMarkdown, _version: &Version) {
     //todo!()
 }
 
-fn get_current_dir() -> PathBuf {
-    match env::current_dir() {
-        Ok(current_dir) => current_dir,
-        Err(io_error) => {
-            fail_with_error(format!("Could not determine current directory: {io_error}"));
-        }
-    }
-}
-
 fn parent_dir(path: &Path) -> PathBuf {
     if let Some(parent) = path.parent() {
         parent.to_path_buf()
@@ -337,8 +332,12 @@ fn fail_with_error<IntoString: Into<String>>(error: IntoString) -> ! {
 }
 
 fn query_toml_ast<'a>(query: &str, node: Node<'a>, source: &[u8]) -> HashMap<String, Node<'a>> {
-    let query = Query::new(tree_sitter_toml::language(), &query)
-        .expect(format!("TOML AST query is invalid: {}", query).as_str());
+    let query = match Query::new(tree_sitter_toml::language(), query) {
+        Ok(query) => query,
+        Err(error) => fail_with_error(
+            format!("TOML AST query is invalid: {query}\n\nError: {error}").as_str(),
+        ),
+    };
     query_ast(query, node, source)
 }
 
@@ -350,7 +349,7 @@ fn query_ast<'a>(query: Query, node: Node<'a>, source: &[u8]) -> HashMap<String,
     for query_match in query_matches {
         for capture in query_match.captures {
             let capture_name = &capture_names[capture.index as usize];
-            query_results.insert(capture_name.clone(), capture.node.clone());
+            query_results.insert(capture_name.clone(), capture.node);
         }
     }
     query_results
