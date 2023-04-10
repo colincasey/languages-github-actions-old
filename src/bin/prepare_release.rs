@@ -3,6 +3,7 @@ use console::Emoji;
 use glob::glob;
 use semver::{BuildMetadata, Prerelease, Version};
 use std::collections::{HashMap, HashSet};
+use std::fs::write;
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 use tree_sitter::{Node, Parser as TreeSitterParser, Query, QueryCursor, Range};
@@ -50,7 +51,7 @@ struct ChangelogMarkdown {
     contents: String,
 }
 
-fn main() {
+fn main() -> std::io::Result<()> {
     let args = Args::parse();
     let targets_to_prepare =
         find_directories_containing_a_buildpack_and_changelog(args.project_dir);
@@ -61,12 +62,14 @@ fn main() {
     for target_to_prepare in targets_to_prepare {
         update_buildpack_version_and_changelog(target_to_prepare, &next_version);
     }
-    //
-    // env::set_var(
-    //     "GITHUB_OUTPUT",
-    //     format!("from_version={current_version} to_version={next_version}"),
-    // );
-    println!("{}", env::var("GITHUB_OUTPUT").unwrap());
+
+    let output_variables = format!("from_version={current_version} to_version={next_version}");
+    if let Ok(output_file) = env::var("GITHUB_OUTPUT") {
+        write(output_file, output_variables)?;
+    } else {
+        println!("{output_variables}");
+    }
+    Ok(())
 }
 
 fn find_directories_containing_a_buildpack_and_changelog(
