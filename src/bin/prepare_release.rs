@@ -63,7 +63,7 @@ fn main() -> std::io::Result<()> {
         update_buildpack_version_and_changelog(target_to_prepare, &next_version);
     }
 
-    let output_variables = format!("from_version={current_version} to_version={next_version}");
+    let output_variables = format!("from_version={current_version}\nto_version={next_version}\n");
     if let Ok(output_file) = env::var("GITHUB_OUTPUT") {
         write(output_file, output_variables)?;
     } else {
