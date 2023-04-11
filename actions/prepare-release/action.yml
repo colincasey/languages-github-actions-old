@@ -10,6 +10,8 @@ outputs:
     value: ${{ steps.prepare.outputs.from_version }}
   to_version:
     value: ${{ steps.prepare.outputs.to_version }}
+  unreleased_changes:
+    value: ${{ steps.prepare.outputs.unreleased_changes }}
 
 runs:
   using: "composite"
@@ -30,3 +32,11 @@ runs:
         cd ${{ github.action_path }}
         cargo run --bin prepare_release -- --bump ${{ inputs.bump }} ${{ github.workspace }}
       shell: bash
+    - name: Create Pull Request
+      uses: peter-evans/create-pull-request@v5
+      with:
+        title: Prepare release v${{ steps.prepare.outputs.to_version }}
+        commit-message: Prepare release v${{ steps.prepare.outputs.to_version }}
+        branch: release/v${{ steps.prepare.outputs.to_version }}
+        body: ${{ steps.prepare.outputs.unreleased_changes }}
+        labels: "automation"
