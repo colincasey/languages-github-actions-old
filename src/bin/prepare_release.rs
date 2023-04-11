@@ -3,7 +3,6 @@ use clap::{Parser, ValueEnum};
 use console::Emoji;
 use glob::glob;
 use libcnb_data::buildpack::{BuildpackDescriptor, BuildpackId, BuildpackVersion};
-use semver::{BuildMetadata, Prerelease, Version};
 use std::collections::{HashMap, HashSet};
 use std::fs::write;
 use std::path::{Path, PathBuf};
