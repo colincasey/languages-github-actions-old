@@ -22,5 +22,6 @@ tree-sitter-toml = "0.20.0"
 tree-sitter-md = "0.1.5"
 libcnb-data = "0.11.5"
 toml = "0.7.1"
+rand = "0.8.5"
 
 [dev-dependencies]

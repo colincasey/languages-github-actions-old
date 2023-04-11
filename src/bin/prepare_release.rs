@@ -3,6 +3,7 @@ use clap::{Parser, ValueEnum};
 use console::Emoji;
 use glob::glob;
 use libcnb_data::buildpack::{BuildpackDescriptor, BuildpackId, BuildpackVersion};
+use rand::distributions::{Alphanumeric, DistString};
 use std::collections::{HashMap, HashSet};
 use std::fs::write;
 use std::path::{Path, PathBuf};
@@ -83,10 +84,15 @@ fn main() -> std::io::Result<()> {
         ("unreleased_changes", unreleased_changes),
     ];
     for (name, value) in output_variables {
-        let line = format!("{name}={value}\n");
+        let output_variable = if value.contains('\n') {
+            let delimiter = Alphanumeric.sample_string(&mut rand::thread_rng(), 20);
+            format!("{name}<<{delimiter}\n{value}\n{delimiter}\n")
+        } else {
+            format!("{name}={value}\n")
+        };
         match env::var("GITHUB_OUTPUT") {
-            Ok(output_file) => write(output_file, line)?,
-            Err(_) => print!("{line}"),
+            Ok(output_file) => write(output_file, output_variable)?,
+            Err(_) => print!("{output_variable}"),
         }
     }
 
