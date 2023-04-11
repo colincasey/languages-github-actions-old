@@ -454,7 +454,7 @@ fn get_fixed_version(targets_to_prepare: &[TargetToPrepare]) -> BuildpackVersion
 fn calculate_next_version(
     current_version: &BuildpackVersion,
     coordinate: VersionCoordinate,
-) -> Version {
+) -> BuildpackVersion {
     let BuildpackVersion {
         major,
         minor,
@@ -463,26 +463,20 @@ fn calculate_next_version(
     } = current_version;
 
     match coordinate {
-        VersionCoordinate::Major => Version {
+        VersionCoordinate::Major => BuildpackVersion {
             major: major + 1,
             minor: 0,
             patch: 0,
-            pre: Prerelease::EMPTY,
-            build: BuildMetadata::EMPTY,
         },
-        VersionCoordinate::Minor => Version {
+        VersionCoordinate::Minor => BuildpackVersion {
             major: *major,
             minor: minor + 1,
             patch: 0,
-            pre: Prerelease::EMPTY,
-            build: BuildMetadata::EMPTY,
         },
-        VersionCoordinate::Patch => Version {
+        VersionCoordinate::Patch => BuildpackVersion {
             major: *major,
             minor: *minor,
             patch: patch + 1,
-            pre: Prerelease::EMPTY,
-            build: BuildMetadata::EMPTY,
         },
     }
 }
@@ -503,12 +497,15 @@ fn get_all_unreleased_changes(targets_to_prepare: &[TargetToPrepare]) -> String 
     format!("{all_unreleased_changes}\n")
 }
 
-fn update_buildpack_version_and_changelog(target_to_prepare: TargetToPrepare, version: &Version) {
+fn update_buildpack_version_and_changelog(
+    target_to_prepare: TargetToPrepare,
+    version: &BuildpackVersion,
+) {
     update_buildpack_toml(&target_to_prepare.buildpack_toml, version);
     update_changelog_md(&target_to_prepare.changelog_md, version);
 }
 
-fn update_buildpack_toml(buildpack_toml: &BuildpackToml, version: &Version) {
+fn update_buildpack_toml(buildpack_toml: &BuildpackToml, version: &BuildpackVersion) {
     eprintln!(
         "{CHECK} Updating version {} → {}: {}",
         buildpack_toml.current_version,
@@ -531,7 +528,7 @@ fn update_buildpack_toml(buildpack_toml: &BuildpackToml, version: &Version) {
     }
 }
 
-fn update_changelog_md(changelog_md: &ChangelogMarkdown, version: &Version) {
+fn update_changelog_md(changelog_md: &ChangelogMarkdown, version: &BuildpackVersion) {
     let formatted_date = Utc::now().format("%Y-%m-%d").to_string();
     let new_header = format!("## [{version}] {formatted_date}");
     let unreleased_changes = get_unreleased_changes_or_empty_message(changelog_md);
