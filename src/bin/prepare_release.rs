@@ -5,7 +5,7 @@ use glob::glob;
 use libcnb_data::buildpack::{BuildpackDescriptor, BuildpackId, BuildpackVersion};
 use rand::distributions::{Alphanumeric, DistString};
 use std::collections::{HashMap, HashSet};
-use std::fs::write;
+use std::fs::{write, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::{env, fs};
 use toml::Table;
@@ -83,17 +83,20 @@ fn main() -> std::io::Result<()> {
         ("to_version", next_version.to_string()),
         ("unreleased_changes", unreleased_changes),
     ];
+
+    let mut output = String::from("");
     for (name, value) in output_variables {
-        let output_variable = if value.contains('\n') {
+        if value.contains('\n') {
             let delimiter = Alphanumeric.sample_string(&mut rand::thread_rng(), 20);
-            format!("{name}<<{delimiter}\n{value}\n{delimiter}\n")
+            output = format!("{output}{name}<<{delimiter}\n{value}\n{delimiter}\n");
         } else {
-            format!("{name}={value}\n")
+            output = format!("{output}{name}={value}\n");
         };
-        match env::var("GITHUB_OUTPUT") {
-            Ok(output_file) => write(output_file, output_variable)?,
-            Err(_) => print!("{output_variable}"),
-        }
+    }
+
+    match env::var("GITHUB_OUTPUT") {
+        Ok(output_file) => write(output_file, output)?,
+        Err(_) => print!("{output}"),
     }
 
     Ok(())
