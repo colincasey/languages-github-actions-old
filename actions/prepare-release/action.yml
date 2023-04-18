@@ -3,7 +3,7 @@ description: "Prepares a buildpack release by bumping the fixed version and upda
 
 inputs:
   bump:
-    description: Which coordinate should be incremented (major, minor, patch)
+    description: Which coordinate should be incremented? (major, minor, patch)
     required: true
 
 outputs:
@@ -36,6 +36,15 @@ runs:
         cd ${{ github.action_path }}
         cargo run --bin prepare_release -- --bump ${{ inputs.bump }} ${{ github.workspace }}
       shell: bash
+    - name: Check output
+      run: |
+        echo "From:"
+        echo ${{ steps.prepare.outputs.from_version }}
+        echo "To:"
+        echo ${{ steps.prepare.outputs.to_version }}
+        echo "Unreleased changes:"
+        echo ${{ steps.prepare.outputs.unreleased_changes }}
+        echo ${{ steps.prepare.outputs }}
     - name: Create Pull Request
       uses: peter-evans/create-pull-request@v5
       with:
