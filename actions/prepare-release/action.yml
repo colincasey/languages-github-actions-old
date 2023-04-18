@@ -45,6 +45,7 @@ runs:
         echo "Unreleased changes:"
         echo ${{ steps.prepare.outputs.unreleased_changes }}
         echo ${{ steps.prepare.outputs }}
+      shell: bash
     - name: Create Pull Request
       uses: peter-evans/create-pull-request@v5
       with:
