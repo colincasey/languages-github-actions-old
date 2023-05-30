@@ -1,0 +1,36 @@
+name: Prepare Buildpack Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Bump"
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+          - major
+          - minor
+          - patch
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare-release:
+    name: Prepare Release
+    runs-on: ubuntu-latest
+    steps:
+      - id: prepare
+        uses: colincasey/languages-github-actions/actions/prepare-release@main
+        with:
+          bump: ${{ inputs.bump }}
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v5
+        with:
+          title: Prepare release v${{ steps.prepare.outputs.to_version }}
+          commit-message: Prepare release v${{ steps.prepare.outputs.to_version }}
+          branch: release/v${{ steps.prepare.outputs.to_version }}
+          body: ${{ steps.prepare.outputs.unreleased_changes }}
+          labels: "automation"

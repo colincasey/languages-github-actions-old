@@ -1,488 +1,157 @@
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use clap::{Parser, ValueEnum};
-use console::Emoji;
-use glob::glob;
-use libcnb_data::buildpack::{BuildpackDescriptor, BuildpackId, BuildpackVersion};
-use rand::distributions::{Alphanumeric, DistString};
-use std::collections::{HashMap, HashSet};
-use std::fs::{write, OpenOptions};
+use languages_github_actions::actions;
+use languages_github_actions::actions::SetOutputError;
+use libcnb_data::buildpack::{BuildpackId, BuildpackVersion};
+use libcnb_package::{find_buildpack_dirs, FindBuildpackDirsError};
+use markdown::mdast::Node;
+use markdown::{to_mdast, ParseOptions};
+use serde::Deserialize;
+use std::collections::{BTreeMap, HashMap, HashSet};
+use std::fmt::{Display, Formatter};
+use std::fs::write;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
-use std::{env, fs};
-use toml::Table;
-use tree_sitter::{Node, Parser as TreeSitterParser, Query, QueryCursor, Range};
-use tree_sitter_md::MarkdownParser;
+use std::{fs, io};
+use toml::Spanned;
 
-static LOOKING_GLASS: Emoji<'_, '_> = Emoji("🔍 ", "");
-static CROSS_MARK: Emoji<'_, '_> = Emoji("❌ ", "");
-static WARNING: Emoji<'_, '_> = Emoji("⚠️ ", "");
-static CHECK: Emoji<'_, '_> = Emoji("✅️ ", "");
-
-const UNSPECIFIED_ERROR: i32 = 1;
-
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    #[arg(long, value_enum)]
-    bump: VersionCoordinate,
-    project_dir: String,
-}
-
-#[derive(ValueEnum, Debug, Clone)]
-enum VersionCoordinate {
-    Major,
-    Minor,
-    Patch,
-}
-
-#[derive(Eq, PartialEq)]
-struct TargetToPrepare {
-    path: PathBuf,
-    buildpack_toml: BuildpackToml,
-    changelog_md: ChangelogMarkdown,
-}
-
-#[derive(Eq, PartialEq)]
-struct BuildpackToml {
-    path: PathBuf,
-    contents: String,
-    buildpack_id: BuildpackId,
-    current_version: BuildpackVersion,
-    current_version_location: Range,
-}
-
-#[derive(Eq, PartialEq)]
-struct ChangelogMarkdown {
-    path: PathBuf,
-    contents: String,
-    unreleased_changes: String,
-    unreleased_changes_location: Range,
-}
-
-fn main() -> std::io::Result<()> {
+fn main() {
     let args = Args::parse();
-    let mut targets_to_prepare =
-        find_directories_containing_a_buildpack_and_changelog(args.project_dir);
-
-    targets_to_prepare.sort_by(|a, b| {
-        let id_a = &a.buildpack_toml.buildpack_id.to_string();
-        let id_b = &b.buildpack_toml.buildpack_id.to_string();
-        id_a.cmp(id_b)
-    });
-
-    let current_version = get_fixed_version(&targets_to_prepare);
-    let next_version = calculate_next_version(&current_version, args.bump);
-    let unreleased_changes = get_all_unreleased_changes(&targets_to_prepare);
-
-    for target_to_prepare in targets_to_prepare {
-        update_buildpack_version_and_changelog(target_to_prepare, &next_version);
+    let project_dir = PathBuf::from(args.project_dir);
+    if let Err(error) = prepare_release(project_dir, args.bump) {
+        eprintln!("❌ {error}");
+        std::process::exit(UNSPECIFIED_ERROR);
     }
+}
 
-    // write output contents to github actions (or fallback to stdout)
-    let output_variables = [
-        ("from_version", current_version.to_string()),
-        ("to_version", next_version.to_string()),
-        ("unreleased_changes", unreleased_changes),
-    ];
+fn prepare_release(project_dir: PathBuf, bump: BumpCoordinate) -> Result<()> {
+    let buildpack_dirs = find_buildpack_dirs(&project_dir)?;
 
-    let mut output = String::from("");
-    for (name, value) in output_variables {
-        if value.contains('\n') {
-            let delimiter = Alphanumeric.sample_string(&mut rand::thread_rng(), 20);
-            output = format!("{output}{name}<<{delimiter}\n{value}\n{delimiter}\n");
-        } else {
-            output = format!("{output}{name}={value}\n");
+    let buildpack_files = buildpack_dirs
+        .iter()
+        .map(|dir| read_buildpack_file(dir))
+        .collect::<Result<Vec<_>>>()?;
+
+    let changelog_files = buildpack_dirs
+        .iter()
+        .map(|dir| read_changelog_file(dir))
+        .collect::<Result<Vec<_>>>()?;
+
+    let current_version = get_fixed_version(&buildpack_files)?;
+
+    let next_version = get_next_version(&current_version, bump);
+
+    let changelog_summary =
+        get_changelog_summary(buildpack_files.iter().zip(changelog_files.iter()).collect());
+
+    for (buildpack_file, changelog_file) in buildpack_files.into_iter().zip(changelog_files) {
+        eprintln!(
+            "✅️ Updating version {current_version} → {next_version}: {}",
+            buildpack_file.path.display(),
+        );
+        write(
+            &buildpack_file.path,
+            update_buildpack_contents_with_new_version(&buildpack_file, &next_version),
+        )
+        .map_err(|e| Error::WritingBuildpack(buildpack_file.path.clone(), e))?;
+
+        let changelog_entry = ChangelogEntry {
+            version: next_version.clone(),
+            date: Utc::now(),
         };
+        eprintln!(
+            "✅️ Adding changelog entry \"{changelog_entry}: {}",
+            changelog_file.path.display()
+        );
+        write(
+            &changelog_file.path,
+            update_changelog_with_new_entry(&changelog_file, &changelog_entry),
+        )
+        .map_err(|e| Error::WritingChangelog(changelog_file.path.clone(), e))?;
     }
 
-    match env::var("GITHUB_OUTPUT") {
-        Ok(output_file) => write(output_file, output)?,
-        Err(_) => print!("{output}"),
-    }
+    actions::set_output("from_version", current_version.to_string())?;
+    actions::set_output("to_version", next_version.to_string())?;
+    actions::set_output("changelog_summary", changelog_summary)?;
 
     Ok(())
 }
 
-fn find_directories_containing_a_buildpack_and_changelog(
-    project_dir: String,
-) -> Vec<TargetToPrepare> {
-    eprintln!("{LOOKING_GLASS} Looking for Buildpacks & Changelogs");
-    let project_dir = PathBuf::from(project_dir);
+fn read_buildpack_file(dir: &Path) -> Result<BuildpackFile> {
+    let path = dir.join("buildpack.toml");
+    let raw =
+        fs::read_to_string(&path).map_err(|error| Error::ReadingBuildpack(path.clone(), error))?;
+    let parsed =
+        toml::from_str(&raw).map_err(|error| Error::ParsingBuildpack(path.clone(), error))?;
+    Ok(BuildpackFile { path, raw, parsed })
+}
 
-    let buildpack_dirs: HashSet<_> =
-        match glob(&project_dir.join("**/buildpack.toml").to_string_lossy()) {
-            Ok(paths) => paths
-                .filter_map(Result::ok)
-                .map(|path| parent_dir(&path))
-                .collect(),
-            Err(error) => {
-                fail_with_error(format!(
-                    "Failed to glob buildpack.toml files in {}: {}",
-                    project_dir.to_string_lossy(),
-                    error
-                ));
-            }
-        };
+fn read_changelog_file(dir: &Path) -> Result<ChangelogFile> {
+    let path = dir.join("CHANGELOG.md");
+    let raw =
+        fs::read_to_string(&path).map_err(|error| Error::ReadingChangelog(path.clone(), error))?;
+    let parsed = parse_changelog(&path, &raw)?;
+    Ok(ChangelogFile { path, raw, parsed })
+}
 
-    let changelog_dirs: HashSet<_> =
-        match glob(&project_dir.join("**/CHANGELOG.md").to_string_lossy()) {
-            Ok(paths) => paths
-                .filter_map(Result::ok)
-                .map(|path| parent_dir(&path))
-                .collect(),
-            Err(error) => {
-                fail_with_error(format!(
-                    "Failed to glob CHANGELOG.md files in {}: {}",
-                    project_dir.to_string_lossy(),
-                    error
-                ));
-            }
-        };
+fn get_changelog_summary(
+    buildpacks_with_changelogs: Vec<(&BuildpackFile, &ChangelogFile)>,
+) -> String {
+    let summary = buildpacks_with_changelogs
+        .into_iter()
+        .map(|(buildpack_file, changelog_file)| {
+            let buildpack_id = buildpack_file.parsed.buildpack.id.to_string();
+            let changes = changelog_file.parsed.unreleased.to_string();
+            (buildpack_id, changes)
+        })
+        .collect::<BTreeMap<_, _>>()
+        .into_iter()
+        .map(|(buildpack_id, changes)| format!("## {buildpack_id}\n\n{changes}"))
+        .collect::<Vec<_>>()
+        .join("\n\n");
+    format!("{}\n", summary.trim())
+}
 
-    let (dirs_with_a_changelog_and_buildpack, dirs_without): (HashSet<_>, HashSet<_>) =
-        buildpack_dirs
-            .into_iter()
-            .partition(|dir| changelog_dirs.contains(dir));
-
-    for dir_without in dirs_without {
-        eprintln!(
-            "{WARNING} Ignoring {}: buildpack.toml found but no CHANGELOG.md",
-            dir_without.to_string_lossy()
-        );
-    }
-
-    dirs_with_a_changelog_and_buildpack
+fn get_fixed_version(buildpack_files: &[BuildpackFile]) -> Result<BuildpackVersion> {
+    let version_map = buildpack_files
         .iter()
-        .map(|dir| create_target_to_prepare(dir))
-        .collect()
-}
-
-fn create_target_to_prepare(dir: &Path) -> TargetToPrepare {
-    let buildpack_toml_path = dir.join("buildpack.toml");
-    let buildpack_toml_contents = match fs::read_to_string(&buildpack_toml_path) {
-        Ok(contents) => contents,
-        Err(error) => fail_with_error(format!(
-            "Could not read contents of {}: {}",
-            buildpack_toml_path.to_string_lossy(),
-            error
-        )),
-    };
-
-    let buildpack: BuildpackDescriptor<Option<Table>> =
-        match toml::from_str(&buildpack_toml_contents) {
-            Ok(buildpack) => buildpack,
-            Err(error) => fail_with_error(format!(
-                "Could not deserialize buildpack data from {}: {}",
-                buildpack_toml_path.to_string_lossy(),
-                error
-            )),
-        };
-
-    let (buildpack_id, buildpack_version) = match buildpack {
-        BuildpackDescriptor::Single(data) => (data.buildpack.id, data.buildpack.version),
-        BuildpackDescriptor::Meta(data) => (data.buildpack.id, data.buildpack.version),
-    };
-
-    let (extracted_version, range) =
-        extract_version_from_buildpack_toml(&buildpack_toml_path, &buildpack_toml_contents);
-
-    if extracted_version != buildpack_version {
-        fail_with_error(format!(
-            "Could not determine the correct text range to replace in {}",
-            buildpack_toml_path.to_string_lossy()
-        ));
-    }
-
-    let buildpack_toml = BuildpackToml {
-        path: buildpack_toml_path,
-        contents: buildpack_toml_contents,
-        current_version: buildpack_version,
-        current_version_location: range,
-        buildpack_id,
-    };
-
-    let changelog_md_path = dir.join("CHANGELOG.md");
-    let changelog_md_contents = match fs::read_to_string(&changelog_md_path) {
-        Ok(contents) => contents,
-        Err(error) => fail_with_error(format!(
-            "Could not read contents of {}: {}",
-            changelog_md_path.to_string_lossy(),
-            error
-        )),
-    };
-    let (unreleased_changes, range) =
-        extract_unreleased_changes_from_changelog_md(&changelog_md_path, &changelog_md_contents);
-    let changelog_md = ChangelogMarkdown {
-        path: changelog_md_path,
-        contents: changelog_md_contents,
-        unreleased_changes,
-        unreleased_changes_location: range,
-    };
-
-    TargetToPrepare {
-        path: dir.to_path_buf(),
-        buildpack_toml,
-        changelog_md,
-    }
-}
-
-// why not just use toml_edit?
-// because it doesn't retain the ordering of toml keys and will rewrite the document entirely :(
-// but using an AST lets us identify the exact line that needs to be updated
-fn extract_version_from_buildpack_toml(
-    path: &Path,
-    contents: &String,
-) -> (BuildpackVersion, Range) {
-    let mut parser = TreeSitterParser::new();
-    parser
-        .set_language(tree_sitter_toml::language())
-        .expect("Treesitter TOML grammar should load");
-
-    let tree = match parser.parse(contents, None) {
-        Some(tree) => tree,
-        None => fail_with_error(format!("Could not parse {}", path.to_string_lossy())),
-    };
-
-    // captures the version entry in the toml document that looks like:
-    // [buildpack]
-    // version = "x.y.z"
-    let query_version_declared_using_table = r#"
-        (
-          (document
-            (table
-              (bare_key) @table-name
-              (pair
-                (bare_key) @property-name
-                (string) @version
-              )
+        .map(|buildpack_file| {
+            (
+                buildpack_file.path.clone(),
+                buildpack_file.parsed.buildpack.version.as_ref().clone(),
             )
-          )
-          (#eq? @table-name "buildpack")
-          (#eq? @property-name "version")
-        )
-    "#;
-
-    // captures the version entry in the toml document that looks like:
-    // buildpack.version = "0.0.0"
-    let query_version_declared_using_dotted_key = r#"
-        (
-          (document
-            (pair
-              (dotted_key
-                (bare_key) @table-name
-                (bare_key) @property-name
-              )
-              (string) @version
-            )
-          )
-          (#eq? @table-name "buildpack")
-          (#eq? @property-name "version")
-        )
-    "#;
-
-    // captures the version entry in the toml document that looks like:
-    // buildpack = { id = "test", version = "0.0.0" }
-    let query_version_declared_using_inline_table = r#"
-        (
-          (document
-            (pair 
-              (bare_key) @table-name
-              (inline_table
-                (pair
-                  (bare_key) @property-name
-                  (string) @version
-                )
-              )
-            )
-          )
-          (#eq? @table-name "buildpack")
-          (#eq? @property-name "version")
-        )
-    "#;
-
-    let queries = [
-        query_version_declared_using_table,
-        query_version_declared_using_dotted_key,
-        query_version_declared_using_inline_table,
-    ];
-
-    for query in queries {
-        let query_results = query_toml_ast(query, tree.root_node(), contents.as_bytes());
-        if let Some(node) = query_results.get("version") {
-            let range = node.range();
-            // toml strings are quoted so we want to remove those to get the inner value
-            let value = String::from(&contents[range.start_byte + 1..range.end_byte - 1]);
-            let version = match BuildpackVersion::try_from(value.clone()) {
-                Ok(parsed_version) => parsed_version,
-                Err(error) => fail_with_error(format!(
-                    "Version {} from {} is invalid: {}",
-                    value,
-                    path.to_string_lossy(),
-                    error
-                )),
-            };
-            return (version, range);
-        }
+        })
+        .collect::<HashMap<_, _>>();
+    let versions = version_map.values().collect::<HashSet<_>>();
+    if versions.len() != 1 {
+        Err(Error::NotAllVersionsMatch(version_map.clone()))?;
     }
-
-    fail_with_error(format!("No version found in {}", path.to_string_lossy()));
+    versions
+        .into_iter()
+        .next()
+        .ok_or(Error::NoFixedVersion)
+        .map(|version| version.clone())
 }
 
-fn query_toml_ast<'a>(query: &str, node: Node<'a>, source: &[u8]) -> HashMap<String, Node<'a>> {
-    let query = match Query::new(tree_sitter_toml::language(), query) {
-        Ok(query) => query,
-        Err(error) => fail_with_error(
-            format!("TOML AST query is invalid: {query}\n\nError: {error}").as_str(),
-        ),
-    };
-    query_ast(query, node, source)
-}
-
-fn extract_unreleased_changes_from_changelog_md(path: &Path, contents: &String) -> (String, Range) {
-    let mut parser = MarkdownParser::default();
-
-    let tree = match parser.parse(contents.as_bytes(), None) {
-        Some(tree) => tree,
-        None => fail_with_error(format!("Could not parse {}", path.to_string_lossy())),
-    };
-
-    let mut cursor = tree.walk();
-
-    'outer: loop {
-        let node = cursor.node();
-
-        if node.kind() == "atx_heading" {
-            let header_range = node.range();
-            let is_unreleased_section = contents[header_range.start_byte..header_range.end_byte]
-                .to_ascii_lowercase()
-                .trim()
-                .ends_with("[unreleased]");
-
-            // we want the contents between the [Unreleased] header and the following one
-            if is_unreleased_section {
-                let mut ranges: Vec<Range> = vec![];
-                // loop through each subsequent sibling in the section to collect the ranges
-                // of our content nodes
-                loop {
-                    if !cursor.goto_next_sibling() {
-                        break;
-                    }
-                    ranges.push(cursor.node().range());
-                }
-
-                let empty_content = (
-                    String::from(""),
-                    Range {
-                        start_byte: header_range.end_byte,
-                        start_point: header_range.end_point,
-                        end_byte: header_range.end_byte,
-                        end_point: header_range.end_point,
-                    },
-                );
-
-                return if let Some(first_range) = ranges.first() {
-                    if let Some(last_range) = ranges.last() {
-                        let range = Range {
-                            start_byte: first_range.start_byte,
-                            start_point: first_range.start_point,
-                            end_byte: last_range.end_byte,
-                            end_point: last_range.end_point,
-                        };
-                        let value = &contents[range.start_byte..range.end_byte];
-                        (value.to_string(), range)
-                    } else {
-                        empty_content
-                    }
-                } else {
-                    empty_content
-                };
-            }
-        }
-
-        // traverse the AST
-        if !cursor.goto_first_child() {
-            loop {
-                if !cursor.goto_parent() {
-                    break 'outer;
-                }
-                if cursor.goto_next_sibling() {
-                    break;
-                }
-            }
-        }
-    }
-
-    fail_with_error(format!("No version found in {}", path.to_string_lossy()));
-}
-
-fn query_ast<'a>(query: Query, node: Node<'a>, source: &[u8]) -> HashMap<String, Node<'a>> {
-    let mut query_results: HashMap<String, Node> = HashMap::new();
-    let mut query_cursor = QueryCursor::new();
-    let capture_names = query.capture_names();
-    let query_matches = query_cursor.matches(&query, node, source);
-    for query_match in query_matches {
-        for capture in query_match.captures {
-            let capture_name = &capture_names[capture.index as usize];
-            query_results.insert(capture_name.clone(), capture.node);
-        }
-    }
-    query_results
-}
-
-fn get_fixed_version(targets_to_prepare: &[TargetToPrepare]) -> BuildpackVersion {
-    let all_versions: HashSet<_> = targets_to_prepare
-        .iter()
-        .map(|target_to_prepare| target_to_prepare.buildpack_toml.current_version.to_string())
-        .collect();
-
-    if all_versions.len() != 1 {
-        fail_with_error(format!(
-            "Not all versions match:\n{}",
-            targets_to_prepare
-                .iter()
-                .map(|target_to_prepare| {
-                    format!(
-                        "• {} ({})",
-                        target_to_prepare.buildpack_toml.path.to_string_lossy(),
-                        target_to_prepare.buildpack_toml.current_version
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join("\n")
-        ));
-    }
-
-    let target_to_prepare = targets_to_prepare
-        .first()
-        .expect("There should only be one");
-
-    BuildpackVersion {
-        ..target_to_prepare.buildpack_toml.current_version
-    }
-}
-
-fn calculate_next_version(
-    current_version: &BuildpackVersion,
-    coordinate: VersionCoordinate,
-) -> BuildpackVersion {
+fn get_next_version(current_version: &BuildpackVersion, bump: BumpCoordinate) -> BuildpackVersion {
     let BuildpackVersion {
         major,
         minor,
         patch,
-        ..
     } = current_version;
 
-    match coordinate {
-        VersionCoordinate::Major => BuildpackVersion {
+    match bump {
+        BumpCoordinate::Major => BuildpackVersion {
             major: major + 1,
             minor: 0,
             patch: 0,
         },
-        VersionCoordinate::Minor => BuildpackVersion {
+        BumpCoordinate::Minor => BuildpackVersion {
             major: *major,
             minor: minor + 1,
             patch: 0,
         },
-        VersionCoordinate::Patch => BuildpackVersion {
+        BumpCoordinate::Patch => BuildpackVersion {
             major: *major,
             minor: *minor,
             patch: patch + 1,
@@ -490,199 +159,466 @@ fn calculate_next_version(
     }
 }
 
-fn get_all_unreleased_changes(targets_to_prepare: &[TargetToPrepare]) -> String {
-    let all_unreleased_changes = targets_to_prepare
-        .iter()
-        .map(|target_to_prepare| {
-            let id = target_to_prepare.buildpack_toml.buildpack_id.clone();
-            let unreleased_changes =
-                get_unreleased_changes_or_empty_message(&target_to_prepare.changelog_md);
-            format!("## {id}\n\n{unreleased_changes}")
-        })
-        .collect::<Vec<String>>()
-        .join("\n\n")
-        .trim()
-        .to_string();
-    format!("{all_unreleased_changes}\n")
-}
-
-fn update_buildpack_version_and_changelog(
-    target_to_prepare: TargetToPrepare,
-    version: &BuildpackVersion,
-) {
-    update_buildpack_toml(&target_to_prepare.buildpack_toml, version);
-    update_changelog_md(&target_to_prepare.changelog_md, version);
-}
-
-fn update_buildpack_toml(buildpack_toml: &BuildpackToml, version: &BuildpackVersion) {
-    eprintln!(
-        "{CHECK} Updating version {} → {}: {}",
-        buildpack_toml.current_version,
-        version,
-        buildpack_toml.path.to_string_lossy(),
-    );
-
-    let new_contents = format!(
+fn update_buildpack_contents_with_new_version(
+    buildpack_file: &BuildpackFile,
+    next_version: &BuildpackVersion,
+) -> String {
+    let contents = &buildpack_file.raw;
+    let metadata = &buildpack_file.parsed.buildpack;
+    let start = metadata.version.span().start;
+    let end = metadata.version.span().end;
+    format!(
         "{}\"{}\"{}",
-        &buildpack_toml.contents[..buildpack_toml.current_version_location.start_byte],
-        version,
-        &buildpack_toml.contents[buildpack_toml.current_version_location.end_byte..]
-    );
-
-    if let Err(error) = write(&buildpack_toml.path, new_contents) {
-        fail_with_error(format!(
-            "Could not write to {}: {error}",
-            &buildpack_toml.path.to_string_lossy()
-        ));
-    }
+        &contents[..start],
+        next_version,
+        &contents[end..]
+    )
 }
 
-fn update_changelog_md(changelog_md: &ChangelogMarkdown, version: &BuildpackVersion) {
-    let formatted_date = Utc::now().format("%Y-%m-%d").to_string();
-    let new_header = format!("## [{version}] {formatted_date}");
-    let unreleased_changes = get_unreleased_changes_or_empty_message(changelog_md);
+fn parse_changelog(path: &Path, changelog_contents: &str) -> Result<Changelog> {
+    let changelog_ast = to_mdast(changelog_contents, &ParseOptions::default())
+        .map_err(|error| Error::ParsingChangelog(path.to_path_buf(), error))?;
 
-    eprintln!(
-        "{CHECK} Adding changelog entry \"{new_header}: {}",
-        changelog_md.path.to_string_lossy()
-    );
+    let mut in_unreleased_section = false;
+    let mut unreleased_header_node = None;
+    let mut unreleased_section_nodes = vec![];
 
-    let entry = format!("{new_header}\n\n{unreleased_changes}");
-    let contents_before =
-        &changelog_md.contents[..changelog_md.unreleased_changes_location.start_byte];
-    let contents_after =
-        &changelog_md.contents[changelog_md.unreleased_changes_location.end_byte..];
+    if let Node::Root(root) = changelog_ast {
+        let children = root.children;
+        for child in &children {
+            if let Node::Heading(_) = child {
+                let heading = child.to_string();
+                if heading.to_lowercase().trim() == "[unreleased]" {
+                    in_unreleased_section = true;
+                    unreleased_header_node = Some(child);
+                } else {
+                    in_unreleased_section = false;
+                }
+            } else if in_unreleased_section {
+                unreleased_section_nodes.push(child);
+            }
+        }
 
-    let new_contents = format!(
+        return if unreleased_section_nodes.is_empty() {
+            unreleased_header_node
+                .and_then(|node| node.position())
+                .ok_or(Error::ParsingChangelog(
+                    path.to_path_buf(),
+                    "No position information for header".to_string(),
+                ))
+                .map(|position| {
+                    let span = position.end.offset + 1..position.end.offset + 1;
+                    Changelog {
+                        unreleased: UnreleasedChanges { span, value: None },
+                    }
+                })
+        } else if unreleased_section_nodes.len() == 1 {
+            unreleased_section_nodes
+                .into_iter()
+                .next()
+                .and_then(|node| node.position())
+                .ok_or(Error::ParsingChangelog(
+                    path.to_path_buf(),
+                    "No position information for unreleased section".to_string(),
+                ))
+                .map(|position| {
+                    let span = position.start.offset..position.end.offset;
+                    let value = changelog_contents[span.start..span.end].to_string();
+                    Changelog {
+                        unreleased: UnreleasedChanges {
+                            span,
+                            value: Some(value),
+                        },
+                    }
+                })
+        } else {
+            // something is off, the only node below the unreleased changes section should be a single list node
+            Err(Error::ParsingChangelog(
+                path.to_path_buf(),
+                "Unreleased section contains multiple nodes but only a single was expected"
+                    .to_string(),
+            ))
+        };
+    }
+
+    Err(Error::ParsingChangelog(
+        path.to_path_buf(),
+        "No root in parsed markdown".to_string(),
+    ))
+}
+
+fn update_changelog_with_new_entry(
+    changelog_file: &ChangelogFile,
+    changelog_entry: &ChangelogEntry,
+) -> String {
+    let changelog = &changelog_file.parsed;
+    let contents = &changelog_file.raw;
+    let unreleased = &changelog.unreleased;
+    let start = changelog.unreleased.span.start;
+    let end = changelog.unreleased.span.end;
+    let value = format!(
         "{}\n\n{}\n\n{}",
-        contents_before.trim_end(),
-        entry.trim(),
-        contents_after.trim_start()
+        &contents[..start].trim_end(),
+        format!("{changelog_entry}\n\n{unreleased}").trim(),
+        &contents[end..].trim_start()
     );
+    format!("{}\n", value.trim_end())
+}
 
-    if let Err(error) = write(&changelog_md.path, format!("{}\n", new_contents.trim_end())) {
-        fail_with_error(format!(
-            "Could not write to {}: {error}",
-            &changelog_md.path.to_string_lossy()
-        ));
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(long, value_enum)]
+    bump: BumpCoordinate,
+    project_dir: String,
+}
+
+#[derive(ValueEnum, Debug, Clone)]
+enum BumpCoordinate {
+    Major,
+    Minor,
+    Patch,
+}
+
+struct BuildpackFile {
+    path: PathBuf,
+    raw: String,
+    parsed: MinimalBuildpackDescriptor,
+}
+
+struct ChangelogFile {
+    path: PathBuf,
+    raw: String,
+    parsed: Changelog,
+}
+
+struct Changelog {
+    unreleased: UnreleasedChanges,
+}
+
+struct UnreleasedChanges {
+    span: Range<usize>,
+    value: Option<String>,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+struct MinimalBuildpackDescriptor {
+    buildpack: BuildpackMetadata,
+}
+
+#[derive(Deserialize, Debug, Clone)]
+struct BuildpackMetadata {
+    id: BuildpackId,
+    version: Spanned<BuildpackVersion>,
+}
+
+struct ChangelogEntry {
+    version: BuildpackVersion,
+    date: DateTime<Utc>,
+}
+
+type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug)]
+enum Error {
+    NotAllVersionsMatch(HashMap<PathBuf, BuildpackVersion>),
+    NoFixedVersion,
+    FindingBuildpacks(PathBuf, io::Error),
+    ReadingBuildpack(PathBuf, io::Error),
+    ParsingBuildpack(PathBuf, toml::de::Error),
+    WritingBuildpack(PathBuf, io::Error),
+    ReadingChangelog(PathBuf, io::Error),
+    ParsingChangelog(PathBuf, String),
+    WritingChangelog(PathBuf, io::Error),
+    SetActionOutput(io::Error),
+}
+
+impl Display for UnreleasedChanges {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match &self.value {
+                Some(changes) => changes,
+                None => "- No Changes",
+            }
+        )
     }
 }
 
-fn get_unreleased_changes_or_empty_message(changelog_md: &ChangelogMarkdown) -> String {
-    let text_or_empty_message = if changelog_md.unreleased_changes.trim().is_empty() {
-        "- No Changes"
-    } else {
-        changelog_md.unreleased_changes.trim()
-    };
-    text_or_empty_message.to_string()
-}
-
-fn parent_dir(path: &Path) -> PathBuf {
-    if let Some(parent) = path.parent() {
-        parent.to_path_buf()
-    } else {
-        fail_with_error(format!(
-            "Could not get parent directory from {}",
-            path.to_string_lossy()
-        ));
+impl Display for ChangelogEntry {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "## [{}] {}",
+            &self.version,
+            &self.date.format("%Y/%m/%d")
+        )
     }
 }
 
-fn fail_with_error<IntoString: Into<String>>(error: IntoString) -> ! {
-    eprintln!("{CROSS_MARK} {}", error.into());
-    std::process::exit(UNSPECIFIED_ERROR);
+impl From<FindBuildpackDirsError> for Error {
+    fn from(value: FindBuildpackDirsError) -> Self {
+        match value {
+            FindBuildpackDirsError::ReadingMetadata(path, error)
+            | FindBuildpackDirsError::ReadingDir(path, error)
+            | FindBuildpackDirsError::GetDirEntry(path, error) => {
+                Error::FindingBuildpacks(path, error)
+            }
+        }
+    }
 }
+
+impl From<SetOutputError> for Error {
+    fn from(value: SetOutputError) -> Self {
+        match value {
+            SetOutputError::Opening(error) | SetOutputError::Writing(error) => {
+                Error::SetActionOutput(error)
+            }
+        }
+    }
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Error::NotAllVersionsMatch(version_map) => {
+                write!(
+                    f,
+                    "Not all version match:\n{}",
+                    version_map
+                        .into_iter()
+                        .map(|(path, version)| format!("• {version} ({})", path.display()))
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                )
+            }
+            Error::NoFixedVersion => {
+                write!(f, "No fixed version could be determined")
+            }
+            Error::FindingBuildpacks(path, error) => {
+                write!(
+                    f,
+                    "I/O error while finding buildpacks\nPath: {}\nError: {error}",
+                    path.display()
+                )
+            }
+            Error::ReadingBuildpack(path, error) => {
+                write!(
+                    f,
+                    "Could not read buildpack\nPath: {}\nError: {error}",
+                    path.display()
+                )
+            }
+            Error::ParsingBuildpack(path, error) => {
+                write!(
+                    f,
+                    "Could not parse buildpack\nPath: {}\nError: {error}",
+                    path.display()
+                )
+            }
+            Error::WritingBuildpack(path, error) => {
+                write!(
+                    f,
+                    "Could not write buildpack\nPath: {}\nError: {error}",
+                    path.display()
+                )
+            }
+            Error::ReadingChangelog(path, error) => {
+                write!(
+                    f,
+                    "Could not read changelog\nPath: {}\nError: {error}",
+                    path.display()
+                )
+            }
+            Error::ParsingChangelog(path, error) => {
+                write!(
+                    f,
+                    "Could not parse changelog\nPath: {}\nError: {error}",
+                    path.display()
+                )
+            }
+            Error::WritingChangelog(path, error) => {
+                write!(
+                    f,
+                    "Could not write changelog\nPath: {}\nError: {error}",
+                    path.display()
+                )
+            }
+            Error::SetActionOutput(error) => {
+                write!(f, "Could not write action output\nError: {error}")
+            }
+        }
+    }
+}
+
+const UNSPECIFIED_ERROR: i32 = 1;
 
 #[cfg(test)]
 mod test {
     use crate::{
-        extract_unreleased_changes_from_changelog_md, extract_version_from_buildpack_toml,
+        get_changelog_summary, get_fixed_version, parse_changelog,
+        update_buildpack_contents_with_new_version, update_changelog_with_new_entry, BuildpackFile,
+        ChangelogEntry, ChangelogFile, Error,
     };
-    use std::path::Path;
+    use chrono::{TimeZone, Utc};
+    use libcnb_data::buildpack::BuildpackVersion;
+    use std::collections::HashMap;
+    use std::path::PathBuf;
 
     #[test]
-    fn test_query_version_from_toml_table() {
+    fn test_changelog_summary() {
+        let buildpack_a = create_buildpack_file(
+            r#"
+[buildpack]
+id = "a"
+version = "0.0.0"
+"#,
+        );
+        let changelog_a = create_changelog_file(
+            r#"
+# Changelog
+
+## [Unreleased]
+
+- change from a
+"#,
+        );
+        let buildpack_b = create_buildpack_file(
+            r#"
+[buildpack]
+id = "b"
+version = "0.0.0"
+"#,
+        );
+        let changelog_b = create_changelog_file(
+            r#"
+# Changelog
+
+## [Unreleased]
+
+- change from b
+- change from b
+"#,
+        );
+
+        let buildpacks_with_changelogs =
+            vec![(&buildpack_b, &changelog_b), (&buildpack_a, &changelog_a)];
+
+        assert_eq!(
+            get_changelog_summary(buildpacks_with_changelogs),
+            r#"## a
+
+- change from a
+
+## b
+
+- change from b
+- change from b
+"#
+        )
+    }
+
+    #[test]
+    fn test_get_fixed_version() {
+        let buildpack_a = create_buildpack_file_with_name(
+            "/a/buildpack.toml",
+            r#"
+[buildpack]
+id = "a"
+version = "0.0.0"
+"#,
+        );
+        let buildpack_b = create_buildpack_file_with_name(
+            "/b/buildpack.toml",
+            r#"
+[buildpack]
+id = "b"
+version = "0.0.0"
+"#,
+        );
+        assert_eq!(
+            get_fixed_version(&vec![buildpack_a, buildpack_b]).unwrap(),
+            BuildpackVersion {
+                major: 0,
+                minor: 0,
+                patch: 0
+            }
+        )
+    }
+
+    #[test]
+    fn test_get_fixed_version_errors_if_there_is_a_version_mismatch() {
+        let buildpack_a = create_buildpack_file_with_name(
+            "/a/buildpack.toml",
+            r#"
+[buildpack]
+id = "a"
+version = "0.0.0"
+"#,
+        );
+        let buildpack_b = create_buildpack_file_with_name(
+            "/b/buildpack.toml",
+            r#"
+[buildpack]
+id = "b"
+version = "0.0.1"
+"#,
+        );
+        match get_fixed_version(&vec![buildpack_a, buildpack_b]).unwrap_err() {
+            Error::NotAllVersionsMatch(version_map) => {
+                assert_eq!(
+                    HashMap::from([
+                        (
+                            PathBuf::from("/a/buildpack.toml"),
+                            BuildpackVersion {
+                                major: 0,
+                                minor: 0,
+                                patch: 0
+                            }
+                        ),
+                        (
+                            PathBuf::from("/b/buildpack.toml"),
+                            BuildpackVersion {
+                                major: 0,
+                                minor: 0,
+                                patch: 1
+                            }
+                        )
+                    ]),
+                    version_map
+                );
+            }
+            _ => panic!("Expected error NoFixedVersion"),
+        };
+    }
+
+    #[test]
+    fn test_update_buildpack_contents_with_new_version() {
         let toml = r#"
 [buildpack]
 id = "test"
 version = "0.0.0"
+            "#;
 
-[[order]]
-
-[[order.group]]
-id = "a"
-version = "0.0.1"
-
-[[order.group]]
-id = "b"
-version = "0.0.2"
-        "#
-        .to_string();
-
-        let (version, range) = extract_version_from_buildpack_toml(Path::new("/test/path"), &toml);
-        assert_eq!("0.0.0", version.to_string());
+        let buildpack_file = create_buildpack_file(toml);
+        let next_version = BuildpackVersion {
+            major: 1,
+            minor: 0,
+            patch: 0,
+        };
         assert_eq!(
-            "\"0.0.0\"",
-            toml[range.start_byte..range.end_byte].to_string()
+            update_buildpack_contents_with_new_version(&buildpack_file, &next_version),
+            r#"
+[buildpack]
+id = "test"
+version = "1.0.0"
+            "#
         );
     }
 
     #[test]
-    fn test_query_version_from_toml_with_dotted_key() {
-        let toml = r#"
-buildpack.id = "test"
-buildpack.version = "0.0.0"
-
-[[order]]
-
-[[order.group]]
-id = "a"
-version = "0.0.1"
-
-[[order.group]]
-id = "b"
-version = "0.0.2"
-        "#
-        .to_string();
-
-        let (version, range) = extract_version_from_buildpack_toml(Path::new("/test/path"), &toml);
-        assert_eq!("0.0.0", version.to_string());
-        assert_eq!(
-            "\"0.0.0\"",
-            toml[range.start_byte..range.end_byte].to_string()
-        );
-    }
-
-    #[test]
-    fn test_query_version_from_toml_with_inline_table() {
-        let toml = r#"
-buildpack = { 
-  id = "test", 
-  version = "0.0.0" 
-}
-
-[[order]]
-
-[[order.group]]
-id = "a"
-version = "0.0.1"
-
-[[order.group]]
-id = "b"
-version = "0.0.2"
-        "#
-        .to_string();
-
-        let (version, range) = extract_version_from_buildpack_toml(Path::new("/test/path"), &toml);
-        assert_eq!("0.0.0", version.to_string());
-        assert_eq!(
-            "\"0.0.0\"",
-            toml[range.start_byte..range.end_byte].to_string()
-        );
-    }
-
-    #[test]
-    fn test_query_unreleased_changes_from_changelog_with_existing_entries() {
+    fn test_get_unreleased_changes_from_changelog_with_existing_entries() {
         let changelog = r#"
 # Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
@@ -691,6 +627,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 - Added node version 18.15.0.
+- Added yarn version 4.0.0-rc.2
 
 ## [0.8.16] 2023/02/27
 
@@ -701,20 +638,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `name` is no longer a required field in package.json. ([#447](https://github.com/heroku/buildpacks-nodejs/pull/447))
 - Added node version 19.5.0.
-        "#
-        .trim().to_string();
+        "#;
 
-        let (unreleased_changes, range) =
-            extract_unreleased_changes_from_changelog_md(Path::new("/test/path"), &changelog);
-        assert_eq!("- Added node version 18.15.0.\n\n", unreleased_changes);
+        let changelog_file = create_changelog_file(changelog);
         assert_eq!(
-            "- Added node version 18.15.0.\n\n",
-            changelog[range.start_byte..range.end_byte].to_string()
+            Some("- Added node version 18.15.0.\n- Added yarn version 4.0.0-rc.2\n".to_string()),
+            changelog_file.parsed.unreleased.value
         );
     }
 
     #[test]
-    fn test_query_unreleased_changes_from_changelog_with_existing_entries_no_spacing() {
+    fn test_update_changelog_from_existing_entries() {
+        let changelog = r#"
+# Changelog
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+- Added node version 18.15.0.
+- Added yarn version 4.0.0-rc.2
+
+## [0.8.16] 2023/02/27
+
+- Added node version 19.7.0, 19.6.1, 14.21.3, 16.19.1, 18.14.1, 18.14.2.
+- Added node version 18.14.0, 19.6.0.
+
+## [0.8.15] 2023/02/02
+
+- `name` is no longer a required field in package.json. ([#447](https://github.com/heroku/buildpacks-nodejs/pull/447))
+- Added node version 19.5.0.
+        "#;
+
+        let changelog_file = create_changelog_file(changelog);
+        let entry = ChangelogEntry {
+            version: BuildpackVersion {
+                major: 0,
+                minor: 8,
+                patch: 17,
+            },
+            date: Utc.with_ymd_and_hms(2023, 5, 29, 0, 0, 0).unwrap(),
+        };
+        assert_eq!(
+            update_changelog_with_new_entry(&changelog_file, &entry),
+            r#"
+# Changelog
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.8.17] 2023/05/29
+
+- Added node version 18.15.0.
+- Added yarn version 4.0.0-rc.2
+
+## [0.8.16] 2023/02/27
+
+- Added node version 19.7.0, 19.6.1, 14.21.3, 16.19.1, 18.14.1, 18.14.2.
+- Added node version 18.14.0, 19.6.0.
+
+## [0.8.15] 2023/02/02
+
+- `name` is no longer a required field in package.json. ([#447](https://github.com/heroku/buildpacks-nodejs/pull/447))
+- Added node version 19.5.0.
+"#
+        );
+    }
+
+    #[test]
+    fn test_get_unreleased_changes_from_changelog_with_existing_entries_no_spacing() {
         let changelog = r#"
 # Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
@@ -722,6 +715,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 - Added node version 18.15.0.
+- Added yarn version 4.0.0-rc.2
 ## [0.8.16] 2023/02/27
 
 - Added node version 19.7.0, 19.6.1, 14.21.3, 16.19.1, 18.14.1, 18.14.2.
@@ -731,20 +725,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `name` is no longer a required field in package.json. ([#447](https://github.com/heroku/buildpacks-nodejs/pull/447))
 - Added node version 19.5.0.
-        "#
-            .trim().to_string();
+        "#;
 
-        let (unreleased_changes, range) =
-            extract_unreleased_changes_from_changelog_md(Path::new("/test/path"), &changelog);
-        assert_eq!("- Added node version 18.15.0.\n", unreleased_changes);
+        let changelog_file = create_changelog_file(changelog);
         assert_eq!(
-            "- Added node version 18.15.0.\n",
-            changelog[range.start_byte..range.end_byte].to_string()
+            Some("- Added node version 18.15.0.\n- Added yarn version 4.0.0-rc.2".to_string()),
+            changelog_file.parsed.unreleased.value
         );
     }
 
     #[test]
-    fn test_query_unreleased_changes_from_changelog_with_no_entries() {
+    fn test_update_changelog_from_existing_entries_no_spacing() {
+        let changelog = r#"
+# Changelog
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+- Added node version 18.15.0.
+- Added yarn version 4.0.0-rc.2
+## [0.8.16] 2023/02/27
+
+- Added node version 19.7.0, 19.6.1, 14.21.3, 16.19.1, 18.14.1, 18.14.2.
+- Added node version 18.14.0, 19.6.0.
+
+## [0.8.15] 2023/02/02
+
+- `name` is no longer a required field in package.json. ([#447](https://github.com/heroku/buildpacks-nodejs/pull/447))
+- Added node version 19.5.0.
+        "#;
+
+        let changelog_file = create_changelog_file(changelog);
+        let entry = ChangelogEntry {
+            version: BuildpackVersion {
+                major: 0,
+                minor: 8,
+                patch: 17,
+            },
+            date: Utc.with_ymd_and_hms(2023, 5, 29, 0, 0, 0).unwrap(),
+        };
+        assert_eq!(
+            update_changelog_with_new_entry(&changelog_file, &entry),
+            r#"
+# Changelog
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.8.17] 2023/05/29
+
+- Added node version 18.15.0.
+- Added yarn version 4.0.0-rc.2
+
+## [0.8.16] 2023/02/27
+
+- Added node version 19.7.0, 19.6.1, 14.21.3, 16.19.1, 18.14.1, 18.14.2.
+- Added node version 18.14.0, 19.6.0.
+
+## [0.8.15] 2023/02/02
+
+- `name` is no longer a required field in package.json. ([#447](https://github.com/heroku/buildpacks-nodejs/pull/447))
+- Added node version 19.5.0.
+"#
+        );
+    }
+
+    #[test]
+    fn test_get_unreleased_changes_from_changelog_with_no_entries() {
         let changelog = r#"
 # Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
@@ -761,30 +809,134 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `name` is no longer a required field in package.json. ([#447](https://github.com/heroku/buildpacks-nodejs/pull/447))
 - Added node version 19.5.0.
-        "#
-            .trim().to_string();
+            "#;
 
-        let (unreleased_changes, range) =
-            extract_unreleased_changes_from_changelog_md(Path::new("/test/path"), &changelog);
-        assert_eq!("", unreleased_changes);
-        assert_eq!("", changelog[range.start_byte..range.end_byte].to_string());
+        let changelog_file = create_changelog_file(changelog);
+        assert_eq!(None, changelog_file.parsed.unreleased.value);
     }
 
     #[test]
-    fn test_query_unreleased_changes_from_changelog_initial_state() {
+    fn test_update_changelog_from_no_entries() {
         let changelog = r#"
 # Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-        "#
-        .trim()
-        .to_string();
 
-        let (unreleased_changes, range) =
-            extract_unreleased_changes_from_changelog_md(Path::new("/test/path"), &changelog);
-        assert_eq!("", unreleased_changes);
-        assert_eq!("", changelog[range.start_byte..range.end_byte].to_string());
+## [0.8.16] 2023/02/27
+
+- Added node version 19.7.0, 19.6.1, 14.21.3, 16.19.1, 18.14.1, 18.14.2.
+- Added node version 18.14.0, 19.6.0.
+
+## [0.8.15] 2023/02/02
+
+- `name` is no longer a required field in package.json. ([#447](https://github.com/heroku/buildpacks-nodejs/pull/447))
+- Added node version 19.5.0.
+            "#;
+
+        let changelog_file = create_changelog_file(changelog);
+        let entry = ChangelogEntry {
+            version: BuildpackVersion {
+                major: 0,
+                minor: 8,
+                patch: 17,
+            },
+            date: Utc.with_ymd_and_hms(2023, 5, 29, 0, 0, 0).unwrap(),
+        };
+        assert_eq!(
+            update_changelog_with_new_entry(&changelog_file, &entry),
+            r#"
+# Changelog
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.8.17] 2023/05/29
+
+- No Changes
+
+## [0.8.16] 2023/02/27
+
+- Added node version 19.7.0, 19.6.1, 14.21.3, 16.19.1, 18.14.1, 18.14.2.
+- Added node version 18.14.0, 19.6.0.
+
+## [0.8.15] 2023/02/02
+
+- `name` is no longer a required field in package.json. ([#447](https://github.com/heroku/buildpacks-nodejs/pull/447))
+- Added node version 19.5.0.
+"#
+        );
+    }
+
+    #[test]
+    fn test_get_unreleased_changes_from_changelog_initial_state() {
+        let changelog = r#"
+# Changelog
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+            "#;
+
+        let changelog_file = create_changelog_file(changelog);
+        assert_eq!(None, changelog_file.parsed.unreleased.value);
+    }
+
+    #[test]
+    fn test_update_changelog_from_initial_state() {
+        let changelog = r#"
+# Changelog
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+"#;
+
+        let changelog_file = create_changelog_file(changelog);
+        let entry = ChangelogEntry {
+            version: BuildpackVersion {
+                major: 0,
+                minor: 0,
+                patch: 1,
+            },
+            date: Utc.with_ymd_and_hms(2023, 5, 29, 0, 0, 0).unwrap(),
+        };
+        assert_eq!(
+            update_changelog_with_new_entry(&changelog_file, &entry),
+            r#"
+# Changelog
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.0.1] 2023/05/29
+
+- No Changes
+"#
+        );
+    }
+
+    fn create_buildpack_file(contents: &str) -> BuildpackFile {
+        create_buildpack_file_with_name("/path/to/test/buildpack.toml", contents)
+    }
+
+    fn create_buildpack_file_with_name(name: &str, contents: &str) -> BuildpackFile {
+        BuildpackFile {
+            path: PathBuf::from(name),
+            raw: contents.to_string(),
+            parsed: toml::from_str(contents).unwrap(),
+        }
+    }
+
+    fn create_changelog_file(contents: &str) -> ChangelogFile {
+        let path = PathBuf::from("/path/to/test/CHANGELOG.md");
+        ChangelogFile {
+            path: path.clone(),
+            raw: contents.to_string(),
+            parsed: parse_changelog(&path, contents).unwrap(),
+        }
     }
 }

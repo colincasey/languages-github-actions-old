@@ -1,0 +1,1 @@
+require('../../../bootstrap').run('prepare-release')

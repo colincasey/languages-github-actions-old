@@ -1,0 +1,19 @@
+name: Prepare Buildpack Release
+description: "Prepares a buildpack release by bumping the fixed version and updating changelogs"
+
+inputs:
+  bump:
+    description: Which coordinate should be incremented? (major, minor, patch)
+    required: true
+
+outputs:
+  from_version:
+    description: The previous version
+  to_version:
+    description: The next version
+  unreleased_changes:
+    description: Markdown content listing the changes about to be released
+
+runs:
+  using: node16
+  main: index.js
