@@ -23,10 +23,8 @@ jobs:
         id: metadata
         shell: bash
         run: |
-          echo "$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[-1].version')"
-          echo "version=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[-1].version')" >> GITHUB_OUTPUT
-          echo "name=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[-1].targets[-1].name')"
-          echo "name=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[-1].targets[-1].name')" >> GITHUB_OUTPUT
+          echo "version=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[-1].version')" >> "$GITHUB_OUTPUT"
+          echo "name=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[-1].targets[-1].name')" >> "$GITHUB_OUTPUT"
       - name: Bundle Release Asset
         id: asset
         shell: bash
