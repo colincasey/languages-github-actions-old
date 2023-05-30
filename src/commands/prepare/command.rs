@@ -1,30 +1,21 @@
+use crate::cli::BumpCoordinate;
+use crate::commands::prepare::errors::Error;
+use crate::github::actions;
 use chrono::{DateTime, Utc};
-use clap::{Parser, ValueEnum};
-use languages_github_actions::actions;
-use languages_github_actions::actions::SetOutputError;
 use libcnb_data::buildpack::{BuildpackId, BuildpackVersion};
-use libcnb_package::{find_buildpack_dirs, FindBuildpackDirsError};
+use libcnb_package::find_buildpack_dirs;
 use markdown::mdast::Node;
 use markdown::{to_mdast, ParseOptions};
 use serde::Deserialize;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::{Display, Formatter};
+use std::fs;
 use std::fs::write;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
-use std::{fs, io};
 use toml::Spanned;
 
-fn main() {
-    let args = Args::parse();
-    let project_dir = PathBuf::from(args.project_dir);
-    if let Err(error) = prepare_release(project_dir, args.bump) {
-        eprintln!("❌ {error}");
-        std::process::exit(UNSPECIFIED_ERROR);
-    }
-}
-
-fn prepare_release(project_dir: PathBuf, bump: BumpCoordinate) -> Result<()> {
+pub(crate) fn execute(project_dir: PathBuf, bump: BumpCoordinate) -> Result<()> {
     let buildpack_dirs = find_buildpack_dirs(&project_dir)?;
 
     let buildpack_files = buildpack_dirs
@@ -265,20 +256,7 @@ fn update_changelog_with_new_entry(
     format!("{}\n", value.trim_end())
 }
 
-#[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
-struct Args {
-    #[arg(long, value_enum)]
-    bump: BumpCoordinate,
-    project_dir: String,
-}
-
-#[derive(ValueEnum, Debug, Clone)]
-enum BumpCoordinate {
-    Major,
-    Minor,
-    Patch,
-}
+type Result<T> = std::result::Result<T, Error>;
 
 struct BuildpackFile {
     path: PathBuf,
@@ -301,6 +279,19 @@ struct UnreleasedChanges {
     value: Option<String>,
 }
 
+impl Display for UnreleasedChanges {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match &self.value {
+                Some(changes) => changes,
+                None => "- No Changes",
+            }
+        )
+    }
+}
+
 #[derive(Deserialize, Debug, Clone)]
 struct MinimalBuildpackDescriptor {
     buildpack: BuildpackMetadata,
@@ -317,35 +308,6 @@ struct ChangelogEntry {
     date: DateTime<Utc>,
 }
 
-type Result<T> = std::result::Result<T, Error>;
-
-#[derive(Debug)]
-enum Error {
-    NotAllVersionsMatch(HashMap<PathBuf, BuildpackVersion>),
-    NoFixedVersion,
-    FindingBuildpacks(PathBuf, io::Error),
-    ReadingBuildpack(PathBuf, io::Error),
-    ParsingBuildpack(PathBuf, toml::de::Error),
-    WritingBuildpack(PathBuf, io::Error),
-    ReadingChangelog(PathBuf, io::Error),
-    ParsingChangelog(PathBuf, String),
-    WritingChangelog(PathBuf, io::Error),
-    SetActionOutput(io::Error),
-}
-
-impl Display for UnreleasedChanges {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match &self.value {
-                Some(changes) => changes,
-                None => "- No Changes",
-            }
-        )
-    }
-}
-
 impl Display for ChangelogEntry {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
@@ -357,110 +319,14 @@ impl Display for ChangelogEntry {
     }
 }
 
-impl From<FindBuildpackDirsError> for Error {
-    fn from(value: FindBuildpackDirsError) -> Self {
-        match value {
-            FindBuildpackDirsError::ReadingMetadata(path, error)
-            | FindBuildpackDirsError::ReadingDir(path, error)
-            | FindBuildpackDirsError::GetDirEntry(path, error) => {
-                Error::FindingBuildpacks(path, error)
-            }
-        }
-    }
-}
-
-impl From<SetOutputError> for Error {
-    fn from(value: SetOutputError) -> Self {
-        match value {
-            SetOutputError::Opening(error) | SetOutputError::Writing(error) => {
-                Error::SetActionOutput(error)
-            }
-        }
-    }
-}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::NotAllVersionsMatch(version_map) => {
-                write!(
-                    f,
-                    "Not all version match:\n{}",
-                    version_map
-                        .into_iter()
-                        .map(|(path, version)| format!("• {version} ({})", path.display()))
-                        .collect::<Vec<_>>()
-                        .join("\n")
-                )
-            }
-            Error::NoFixedVersion => {
-                write!(f, "No fixed version could be determined")
-            }
-            Error::FindingBuildpacks(path, error) => {
-                write!(
-                    f,
-                    "I/O error while finding buildpacks\nPath: {}\nError: {error}",
-                    path.display()
-                )
-            }
-            Error::ReadingBuildpack(path, error) => {
-                write!(
-                    f,
-                    "Could not read buildpack\nPath: {}\nError: {error}",
-                    path.display()
-                )
-            }
-            Error::ParsingBuildpack(path, error) => {
-                write!(
-                    f,
-                    "Could not parse buildpack\nPath: {}\nError: {error}",
-                    path.display()
-                )
-            }
-            Error::WritingBuildpack(path, error) => {
-                write!(
-                    f,
-                    "Could not write buildpack\nPath: {}\nError: {error}",
-                    path.display()
-                )
-            }
-            Error::ReadingChangelog(path, error) => {
-                write!(
-                    f,
-                    "Could not read changelog\nPath: {}\nError: {error}",
-                    path.display()
-                )
-            }
-            Error::ParsingChangelog(path, error) => {
-                write!(
-                    f,
-                    "Could not parse changelog\nPath: {}\nError: {error}",
-                    path.display()
-                )
-            }
-            Error::WritingChangelog(path, error) => {
-                write!(
-                    f,
-                    "Could not write changelog\nPath: {}\nError: {error}",
-                    path.display()
-                )
-            }
-            Error::SetActionOutput(error) => {
-                write!(f, "Could not write action output\nError: {error}")
-            }
-        }
-    }
-}
-
-const UNSPECIFIED_ERROR: i32 = 1;
-
 #[cfg(test)]
 mod test {
-    use crate::{
+    use crate::commands::prepare::command::{
         get_changelog_summary, get_fixed_version, parse_changelog,
         update_buildpack_contents_with_new_version, update_changelog_with_new_entry, BuildpackFile,
-        ChangelogEntry, ChangelogFile, Error,
+        ChangelogEntry, ChangelogFile,
     };
+    use crate::commands::prepare::errors::Error;
     use chrono::{TimeZone, Utc};
     use libcnb_data::buildpack::BuildpackVersion;
     use std::collections::HashMap;

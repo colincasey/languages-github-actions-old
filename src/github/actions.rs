@@ -3,7 +3,7 @@ use std::fs::OpenOptions;
 use std::io;
 use std::io::{stdout, Write};
 
-pub fn set_output<N: Into<String>, V: Into<String>>(
+pub(crate) fn set_output<N: Into<String>, V: Into<String>>(
     name: N,
     value: V,
 ) -> Result<(), SetOutputError> {
@@ -33,7 +33,7 @@ pub fn set_output<N: Into<String>, V: Into<String>>(
         .map_err(SetOutputError::Writing)
 }
 
-pub enum SetOutputError {
+pub(crate) enum SetOutputError {
     Opening(io::Error),
     Writing(io::Error),
 }
