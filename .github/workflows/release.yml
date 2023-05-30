@@ -36,24 +36,21 @@ jobs:
           export ARCH="linux" &&
             if [ "$OS" = "macos-latest" ]; then export ARCH="darwin"; fi &&
             if [ "$OS" = "windows-latest" ]; then export ARCH="win32"; fi
-          
+
           export ASSET_NAME="${NAME}-v${VERSION}-${ARCH}-x64.tar.gz"
-          
+
           export ASSET_PATH="${RUNNER_TEMP}/${ASSET_NAME}" 
-          
+
           if [ "$OS" = "windows-latest" ]; then export NAME="${NAME}.exe"; fi
-          
+
           export BINARY="./target/release/${NAME}"
-          
-          echo "${NAME} | ${VERSION} | ${ARCH} | ${ASSET_NAME} | ${ASSET_PATH} | ${BINARY}"  
-          
+
           if [ "$OS" != "windows-latest" ]; then strip "$BINARY"; fi
-          
+
           if [ "$OS" != "windows-latest" ]; then tar -czf "$ASSET_PATH" -C "./target/release" "$NAME"; fi 
-          
           if [ "$OS" = "windows-latest" ]; then tar --force-local -czf "$ASSET_PATH" -C "./target/release" "$NAME"; fi
           
-          echo "path=${ASSET_PATH}" >> GITHUB_OUTPUT
+          echo "path=${ASSET_PATH}" >> "$GITHUB_OUTPUT"
 #      - name: Check if tag is released
 #        id: tag
 #        shell: bash
