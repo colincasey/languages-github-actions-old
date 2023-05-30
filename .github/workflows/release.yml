@@ -51,55 +51,19 @@ jobs:
           if [ "$OS" = "windows-latest" ]; then tar --force-local -czf "$ASSET_PATH" -C "./target/release" "$NAME"; fi
           
           echo "path=${ASSET_PATH}" >> "$GITHUB_OUTPUT"
-#      - name: Check if tag is released
-#        id: tag
-#        shell: bash
-#        env:
-#          TAG: ${{ steps.metadata.outputs.version }}
-#        run: |
-#          echo "exists=$(git fetch --depth=1 origin "+refs/tags/${TAG}" > /dev/null 2>&1 && echo 'true' || echo 'false')" >> GITHUB_OUTPUT
-#
-#      - name: Create Release
-#        uses: softprops/action-gh-release@v1
-#        if: steps.tag.outputs.exists == 'false'
-#        env:
-#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-#        with:
-#          tag_name: v${{ steps.metadata.outputs.version }}
-#          files: ${{ steps.asset.outputs.path }}
-#  retag:
-#    runs-on: ubuntu-latest
-#    needs: release
-#    steps:
-#      - name: Checkout
-#        uses: actions/checkout@v2
-#      - name: Get Cargo Metadata
-#        id: cargo
-#        shell: bash
-#        run: >-
-#          echo -n "::set-output name=version::" &&
-#          cargo metadata --format-version=1 --no-deps |
-#          jq -r '.packages[-1].version'
-#      - name: Check if tag is released
-#        id: tag
-#        shell: bash
-#        env:
-#          TAG: ${{ steps.cargo.outputs.version }}
-#        run: >-
-#          git fetch --depth=1 origin "+refs/tags/${TAG}" > /dev/null 2>&1 &&
-#          echo "::set-output name=exists::true" ||
-#          echo "::set-output name=exists::false"
-#      - name: Create semver tags
-#        if: steps.tag.outputs.exists == 'false'
-#        shell: bash
-#        env:
-#          VERSION: ${{ steps.cargo.outputs.version }}
-#        run: >-
-#          export MAJOR_VERSION="$(cut -d'.' -f1 <<< "$VERSION")" &&
-#          export MINOR_VERSION="$(cut -d'.' -f1-2 <<< "$VERSION")" &&
-#          git tag "$MAJOR_VERSION" &&
-#          git tag "$MINOR_VERSION" &&
-#          git tag "$VERSION" &&
-#          git push -f origin "$MAJOR_VERSION" &&
-#          git push -f origin "$MINOR_VERSION" &&
-#          git push -f origin "$VERSION"
+      - name: Check if tag is released
+        id: tag
+        shell: bash
+        env:
+          TAG: ${{ steps.metadata.outputs.version }}
+        run: |
+          echo "exists=$(git fetch --depth=1 origin "+refs/tags/${TAG}" > /dev/null 2>&1 && echo 'true' || echo 'false')" >> "$GITHUB_OUTPUT"
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        if: steps.tag.outputs.exists == 'false'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.metadata.outputs.version }}
+          files: ${{ steps.asset.outputs.path }}
+          generate_release_notes: true
