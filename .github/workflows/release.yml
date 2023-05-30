@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - master
+      - main
 
 jobs:
   release:
@@ -19,12 +19,31 @@ jobs:
         run: cargo build --release
       - name: Test
         run: cargo test --release
-#      - name: Get Cargo Metadata
-#        id: metadata
-#        shell: bash
-#        run: |
-#          echo "version=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[-1].version')" >> GITHUB_OUTPUT
-#          echo "name=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[-1].name')" >> GITHUB_OUTPUT
+      - name: Get Cargo Metadata
+        id: metadata
+        shell: bash
+        run: |
+          echo "version=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[-1].version')" >> GITHUB_OUTPUT
+          echo "name=$(cargo metadata --format-version=1 --no-deps | jq -r '.packages[-1].name')" >> GITHUB_OUTPUT
+      - name: Bundle Release Asset
+        id: asset
+        shell: bash
+        env:
+          NAME: ${{ steps.metadata.outputs.name }}
+          VERSION: ${{ steps.metadata.outputs.version }}
+          OS: ${{ matrix.os }}
+        run: >-
+          export ARCH="linux" &&
+          if [ "$OS" = "macos-latest" ]; then export ARCH="darwin"; fi &&
+          if [ "$OS" = "windows-latest" ]; then export ARCH="win32"; fi &&
+          export ASSET_NAME="${NAME}-v${VERSION}-${ARCH}-x64.tar.gz" &&
+          export ASSET_PATH="${RUNNER_TEMP}/${ASSET_NAME}" &&
+          if [ "$OS" = "windows-latest" ]; then export NAME="${NAME}.exe"; fi &&
+          export BINARY="./target/release/${NAME}" &&
+          if [ "$OS" != "windows-latest" ]; then strip "$BINARY"; fi &&
+          if [ "$OS" != "windows-latest" ]; then tar -czf "$ASSET_PATH" -C "./target/release" "$NAME"; fi &&
+          if [ "$OS" = "windows-latest" ]; then tar --force-local -czf "$ASSET_PATH" -C "./target/release" "$NAME"; fi &&
+          echo "path=${ASSET_PATH}" >> GITHUB_OUTPUT
 #      - name: Check if tag is released
 #        id: tag
 #        shell: bash
@@ -32,26 +51,7 @@ jobs:
 #          TAG: ${{ steps.metadata.outputs.version }}
 #        run: |
 #          echo "exists=$(git fetch --depth=1 origin "+refs/tags/${TAG}" > /dev/null 2>&1 && echo 'true' || echo 'false')" >> GITHUB_OUTPUT
-#      - name: Bundle Release Asset
-#        id: asset
-#        shell: bash
-#        env:
-#          NAME: ${{ steps.metadata.outputs.name }}
-#          VERSION: ${{ steps.metadata.outputs.version }}
-#          OS: ${{ matrix.os }}
-#        run: >-
-#          export ARCH="linux" &&
-#          if [ "$OS" = "macos-latest" ]; then export ARCH="darwin"; fi &&
-#          if [ "$OS" = "windows-latest" ]; then export ARCH="win32"; fi &&
-#          export ASSET_NAME="${NAME}-v${VERSION}-${ARCH}-x64.tar.gz" &&
-#          export ASSET_PATH="${RUNNER_TEMP}/${ASSET_NAME}" &&
-#          if [ "$OS" = "windows-latest" ]; then export NAME="${NAME}.exe"; fi &&
-#          export BINARY="./target/release/${NAME}" &&
-#          if [ "$OS" != "windows-latest" ]; then strip "$BINARY"; fi &&
-#          if [ "$OS" != "windows-latest" ]; then tar -czf "$ASSET_PATH" -C "./target/release" "$NAME"; fi &&
-#          if [ "$OS" = "windows-latest" ]; then tar --force-local -czf "$ASSET_PATH" -C "./target/release" "$NAME"; fi &&
-#          echo -n "::set-output name=path::" &&
-#          echo "$ASSET_PATH"
+#
 #      - name: Create Release
 #        uses: softprops/action-gh-release@v1
 #        if: steps.tag.outputs.exists == 'false'
