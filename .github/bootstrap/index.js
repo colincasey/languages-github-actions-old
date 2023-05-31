@@ -10824,30 +10824,43 @@ function invokeWith(getArgs) {
 }
 function executeRustBinaryAction(getArgs) {
     return __awaiter(this, void 0, void 0, function* () {
+        (0,core.startGroup)('bootstrapping');
         const { platform, env } = process;
         if (platform !== 'win32' && platform !== 'darwin' && platform !== 'linux') {
             throw new Error(`Unsupported platform: ${platform}`);
         }
         const toml = (0,node_modules_toml.parse)((0,external_node_fs_namespaceObject.readFileSync)((0,external_node_path_namespaceObject.join)(__dirname, "../../Cargo.toml"), 'utf-8'));
         const tempDirectory = env.RUNNER_TEMP;
-        const { repository, version } = toml.package;
         const { name } = toml.bin[0];
+        (0,core.info)(`name: ${name}`);
+        const { repository, version } = toml.package;
+        (0,core.info)(`version: ${version}\nrepository: ${repository}`);
         const binaryName = platform === 'win32' ? `${name}.exe` : name;
+        (0,core.info)(`binaryName: ${binaryName}`);
         const githubOrgAndName = (0,external_node_url_namespaceObject.parse)(repository).pathname
             .replace(/^\//, '')
             .replace(/\.git$/, '');
         // now we should be able to build up our download url which looks something like this:
         // https://github.com/colincasey/languages-github-actions/releases/download/v0.0.0/actions-v0.0.0-darwin-x64.tar.gz
         const releaseUrl = `https://github.com/${githubOrgAndName}/releases/download/v${version}/${name}-v${version}-${platform}-x64.tar.gz`;
+        (0,core.info)(`releaseUrl: ${releaseUrl}`);
         let cachedPath = (0,tool_cache.find)(githubOrgAndName, version);
+        (0,core.info)(`is cached: ${cachedPath ? true : false}`);
         if (!cachedPath) {
             const downloadPath = yield (0,tool_cache.downloadTool)(releaseUrl);
+            (0,core.info)(`downloadPath: ${downloadPath}`);
             const extractPath = yield (0,tool_cache.extractTar)(downloadPath, tempDirectory);
+            (0,core.info)(`extractPath: ${extractPath}`);
             const extractedFile = (0,external_node_path_namespaceObject.join)(extractPath, binaryName);
+            (0,core.info)(`extractedFile: ${extractedFile}`);
             cachedPath = yield (0,tool_cache.cacheFile)(extractedFile, binaryName, githubOrgAndName, version);
         }
+        (0,core.info)(`using cache path: ${cachedPath}`);
         const rustBinary = (0,external_node_path_namespaceObject.join)(cachedPath, name);
+        (0,core.info)(`using binary: ${rustBinary}`);
         const args = getArgs({ getInput: core.getInput, getBooleanInput: core.getBooleanInput, getMultilineInput: core.getMultilineInput });
+        (0,core.info)(`using args: ${args.join(" ")}`);
+        (0,core.endGroup)();
         yield (0,exec.exec)(rustBinary, args);
     });
 }
