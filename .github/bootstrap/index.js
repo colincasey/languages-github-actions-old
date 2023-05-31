@@ -10824,13 +10824,13 @@ function invokeWith(getArgs) {
 }
 function executeRustBinaryAction(getArgs) {
     return __awaiter(this, void 0, void 0, function* () {
-        (0,core.startGroup)('bootstrapping');
+        (0,core.startGroup)('Bootstrapping');
         const { platform, env } = process;
+        const tempDirectory = env.RUNNER_TEMP;
         if (platform !== 'win32' && platform !== 'darwin' && platform !== 'linux') {
             throw new Error(`Unsupported platform: ${platform}`);
         }
         const toml = (0,node_modules_toml.parse)((0,external_node_fs_namespaceObject.readFileSync)((0,external_node_path_namespaceObject.join)(__dirname, "../../Cargo.toml"), 'utf-8'));
-        const tempDirectory = env.RUNNER_TEMP;
         const { name } = toml.bin[0];
         (0,core.info)(`name: ${name}`);
         const { repository, version } = toml.package;

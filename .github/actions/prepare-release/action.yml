@@ -5,6 +5,9 @@ inputs:
   bump:
     description: Which coordinate should be incremented? (major, minor, patch)
     required: true
+  project_dir:
+    description: The path to the project to prepare
+    default: .
 
 outputs:
   from_version:

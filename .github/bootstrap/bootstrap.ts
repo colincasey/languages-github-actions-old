@@ -24,17 +24,16 @@ export function invokeWith(getArgs: GetArguments) {
 }
 
 async function executeRustBinaryAction(getArgs: GetArguments) {
-    startGroup('bootstrapping');
+    startGroup('Bootstrapping');
 
     const { platform, env } = process
+    const tempDirectory = env.RUNNER_TEMP
 
     if (platform !== 'win32' && platform !== 'darwin' && platform !== 'linux') {
         throw new Error(`Unsupported platform: ${platform}`)
     }
 
     const toml = tomlParse(readFileSync(join(__dirname, "../../Cargo.toml"), 'utf-8'))
-
-    const tempDirectory = env.RUNNER_TEMP
 
     const { name } = toml.bin[0]
     info(`name: ${name}`)
