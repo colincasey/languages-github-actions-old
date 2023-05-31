@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v3
       - name: Prepare
         id: prepare
-        uses: colincasey/languages-github-actions/actions/prepare-release@main
+        uses: colincasey/languages-github-actions/.github/actions/prepare-release@main
         with:
           bump: ${{ inputs.bump }}
       - name: Create Pull Request
