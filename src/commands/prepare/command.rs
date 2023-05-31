@@ -209,7 +209,15 @@ fn parse_changelog(path: &Path, changelog_contents: &str) -> Result<Changelog> {
                     "No position information for header".to_string(),
                 ))
                 .map(|position| {
-                    let span = position.end.offset + 1..position.end.offset + 1;
+                    // because we're operating with just the header location here but no contents
+                    // we need to ensure the range doesn't exceed the actual content length
+                    let assumed_end = position.end.offset + 1;
+                    let content_end = changelog_contents.len();
+                    let span = if assumed_end < content_end {
+                        assumed_end..assumed_end
+                    } else {
+                        content_end..content_end
+                    };
                     Changelog {
                         unreleased: UnreleasedChanges { span, value: None },
                     }
@@ -260,9 +268,9 @@ fn update_changelog_with_new_entry(
     let end = changelog.unreleased.span.end;
     let value = format!(
         "{}\n\n{}\n\n{}",
-        &contents[..start].trim_end(),
+        contents[..start].trim_start(),
         format!("{changelog_entry}\n\n{unreleased}").trim(),
-        &contents[end..].trim_start()
+        contents[end..].trim_start()
     );
     format!("{}\n", value.trim_end())
 }
@@ -788,6 +796,30 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [0.0.1] 2023/05/29
+
+- No Changes
+"#
+        );
+    }
+
+    #[test]
+    fn test_update_changelog_from_initial_state_and_no_newline() {
+        let changelog = "## [Unreleased]";
+
+        let changelog_file = create_changelog_file(changelog);
+        let entry = ChangelogEntry {
+            version: BuildpackVersion {
+                major: 0,
+                minor: 0,
+                patch: 1,
+            },
+            date: Utc.with_ymd_and_hms(2023, 5, 29, 0, 0, 0).unwrap(),
+        };
+        assert_eq!(
+            update_changelog_with_new_entry(&changelog_file, &entry),
+            r#"## [Unreleased]
 
 ## [0.0.1] 2023/05/29
 
