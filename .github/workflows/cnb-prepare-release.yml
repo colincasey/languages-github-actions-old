@@ -19,7 +19,6 @@ permissions:
 
 jobs:
   prepare-release:
-    name: Prepare Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
