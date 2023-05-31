@@ -16,7 +16,15 @@ use std::path::{Path, PathBuf};
 use toml::Spanned;
 
 pub(crate) fn execute(project_dir: PathBuf, bump: BumpCoordinate) -> Result<()> {
+    println!(
+        "current dir: {}",
+        std::env::current_dir().unwrap().display()
+    );
     let buildpack_dirs = find_buildpack_dirs(&project_dir)?;
+
+    if buildpack_dirs.is_empty() {
+        Err(Error::NoBuildpacksFound(project_dir.clone()))?;
+    }
 
     let buildpack_files = buildpack_dirs
         .iter()

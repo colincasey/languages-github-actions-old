@@ -8,6 +8,7 @@ use std::path::PathBuf;
 
 #[derive(Debug)]
 pub enum Error {
+    NoBuildpacksFound(PathBuf),
     NotAllVersionsMatch(HashMap<PathBuf, BuildpackVersion>),
     NoFixedVersion,
     FindingBuildpacks(PathBuf, io::Error),
@@ -48,7 +49,7 @@ impl Display for Error {
             Error::NotAllVersionsMatch(version_map) => {
                 write!(
                     f,
-                    "Not all version match:\n{}",
+                    "Not all versions match:\n{}",
                     version_map
                         .into_iter()
                         .map(|(path, version)| format!("• {version} ({})", path.display()))
