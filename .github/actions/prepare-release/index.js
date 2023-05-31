@@ -1,4 +1,4 @@
-require('../bootstrap').invokeWith(({ getInput }) => {
+require('../../bootstrap').invokeWith(({ getInput }) => {
     return [
         'prepare',
         '--bump',

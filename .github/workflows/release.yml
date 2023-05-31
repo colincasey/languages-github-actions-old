@@ -4,10 +4,12 @@ permissions:
   contents: write
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - main
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
   release:
@@ -16,12 +18,19 @@ jobs:
         os: [macos-latest, ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
+      # Setup
       - name: Checkout
         uses: actions/checkout@v3
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+
+      # Build & Test
       - name: Build
         run: cargo build --release
       - name: Test
         run: cargo test --release
+
+      # Publish
       - name: Get Cargo Metadata
         id: metadata
         shell: bash
