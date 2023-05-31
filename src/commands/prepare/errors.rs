@@ -46,12 +46,15 @@ impl From<SetOutputError> for Error {
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            Error::NoBuildpacksFound(path) => {
+                write!(f, "No buildpacks found under {}", path.display())
+            }
             Error::NotAllVersionsMatch(version_map) => {
                 write!(
                     f,
                     "Not all versions match:\n{}",
                     version_map
-                        .into_iter()
+                        .iter()
                         .map(|(path, version)| format!("• {version} ({})", path.display()))
                         .collect::<Vec<_>>()
                         .join("\n")
