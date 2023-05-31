@@ -10780,7 +10780,7 @@ __nccwpck_require__.r(__webpack_exports__);
 
 // EXPORTS
 __nccwpck_require__.d(__webpack_exports__, {
-  "run": () => (/* binding */ run)
+  "invokeWith": () => (/* binding */ invokeWith)
 });
 
 ;// CONCATENATED MODULE: external "node:fs"
@@ -10815,14 +10815,14 @@ var __awaiter = (undefined && undefined.__awaiter) || function (thisArg, _argume
 
 
 
-function run(rustCommand) {
-    execute_rust_binary_action(rustCommand).catch(e => {
+function invokeWith(getArgs) {
+    executeRustBinaryAction(getArgs).catch(e => {
         if (e instanceof Error) {
             (0,core.setFailed)(e.message);
         }
     });
 }
-function execute_rust_binary_action(rustCommand) {
+function executeRustBinaryAction(getArgs) {
     return __awaiter(this, void 0, void 0, function* () {
         const { platform, env } = process;
         if (platform !== 'win32' && platform !== 'darwin' && platform !== 'linux') {
@@ -10847,7 +10847,8 @@ function execute_rust_binary_action(rustCommand) {
             cachedPath = yield (0,tool_cache.cacheFile)(extractedFile, binaryName, githubOrgAndName, version);
         }
         const rustBinary = (0,external_node_path_namespaceObject.join)(cachedPath, name);
-        yield (0,exec.exec)(rustBinary, [rustCommand]);
+        const args = getArgs({ getInput: core.getInput, getBooleanInput: core.getBooleanInput, getMultilineInput: core.getMultilineInput });
+        yield (0,exec.exec)(rustBinary, args);
     });
 }
 
