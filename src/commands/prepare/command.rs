@@ -267,10 +267,10 @@ fn update_changelog_with_new_entry(
     let start = changelog.unreleased.span.start;
     let end = changelog.unreleased.span.end;
     let value = format!(
-        "{}\n\n{}\n\n{}",
-        contents[..start].trim_start(),
+        "{}\n\n{}\n\n{}\n",
+        contents[..start].trim(),
         format!("{changelog_entry}\n\n{unreleased}").trim(),
-        contents[end..].trim_start()
+        contents[end..].trim()
     );
     format!("{}\n", value.trim_end())
 }
@@ -354,15 +354,13 @@ mod test {
     #[test]
     fn test_changelog_summary() {
         let buildpack_a = create_buildpack_file(
-            r#"
-[buildpack]
+            r#"[buildpack]
 id = "a"
 version = "0.0.0"
 "#,
         );
         let changelog_a = create_changelog_file(
-            r#"
-# Changelog
+            r#"# Changelog
 
 ## [Unreleased]
 
@@ -370,15 +368,13 @@ version = "0.0.0"
 "#,
         );
         let buildpack_b = create_buildpack_file(
-            r#"
-[buildpack]
+            r#"[buildpack]
 id = "b"
 version = "0.0.0"
 "#,
         );
         let changelog_b = create_changelog_file(
-            r#"
-# Changelog
+            r#"# Changelog
 
 ## [Unreleased]
 
@@ -408,16 +404,14 @@ version = "0.0.0"
     fn test_get_fixed_version() {
         let buildpack_a = create_buildpack_file_with_name(
             "/a/buildpack.toml",
-            r#"
-[buildpack]
+            r#"[buildpack]
 id = "a"
 version = "0.0.0"
 "#,
         );
         let buildpack_b = create_buildpack_file_with_name(
             "/b/buildpack.toml",
-            r#"
-[buildpack]
+            r#"[buildpack]
 id = "b"
 version = "0.0.0"
 "#,
@@ -436,16 +430,14 @@ version = "0.0.0"
     fn test_get_fixed_version_errors_if_there_is_a_version_mismatch() {
         let buildpack_a = create_buildpack_file_with_name(
             "/a/buildpack.toml",
-            r#"
-[buildpack]
+            r#"[buildpack]
 id = "a"
 version = "0.0.0"
 "#,
         );
         let buildpack_b = create_buildpack_file_with_name(
             "/b/buildpack.toml",
-            r#"
-[buildpack]
+            r#"[buildpack]
 id = "b"
 version = "0.0.1"
 "#,
@@ -480,8 +472,7 @@ version = "0.0.1"
 
     #[test]
     fn test_update_buildpack_contents_with_new_version() {
-        let toml = r#"
-[buildpack]
+        let toml = r#"[buildpack]
 id = "test"
 version = "0.0.0"
             "#;
@@ -494,8 +485,7 @@ version = "0.0.0"
         };
         assert_eq!(
             update_buildpack_contents_with_new_version(&buildpack_file, &next_version),
-            r#"
-[buildpack]
+            r#"[buildpack]
 id = "test"
 version = "1.0.0"
             "#
@@ -504,8 +494,7 @@ version = "1.0.0"
 
     #[test]
     fn test_get_unreleased_changes_from_changelog_with_existing_entries() {
-        let changelog = r#"
-# Changelog
+        let changelog = r#"# Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -534,8 +523,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
     #[test]
     fn test_update_changelog_from_existing_entries() {
-        let changelog = r#"
-# Changelog
+        let changelog = r#"# Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -553,7 +541,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `name` is no longer a required field in package.json. ([#447](https://github.com/heroku/buildpacks-nodejs/pull/447))
 - Added node version 19.5.0.
-        "#;
+"#;
 
         let changelog_file = create_changelog_file(changelog);
         let entry = ChangelogEntry {
@@ -566,8 +554,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
         };
         assert_eq!(
             update_changelog_with_new_entry(&changelog_file, &entry),
-            r#"
-# Changelog
+            r#"# Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -593,8 +580,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
     #[test]
     fn test_get_unreleased_changes_from_changelog_with_existing_entries_no_spacing() {
-        let changelog = r#"
-# Changelog
+        let changelog = r#"# Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -610,7 +596,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `name` is no longer a required field in package.json. ([#447](https://github.com/heroku/buildpacks-nodejs/pull/447))
 - Added node version 19.5.0.
-        "#;
+"#;
 
         let changelog_file = create_changelog_file(changelog);
         assert_eq!(
@@ -621,8 +607,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
     #[test]
     fn test_update_changelog_from_existing_entries_no_spacing() {
-        let changelog = r#"
-# Changelog
+        let changelog = r#"# Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -638,7 +623,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `name` is no longer a required field in package.json. ([#447](https://github.com/heroku/buildpacks-nodejs/pull/447))
 - Added node version 19.5.0.
-        "#;
+"#;
 
         let changelog_file = create_changelog_file(changelog);
         let entry = ChangelogEntry {
@@ -651,8 +636,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
         };
         assert_eq!(
             update_changelog_with_new_entry(&changelog_file, &entry),
-            r#"
-# Changelog
+            r#"# Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -678,8 +662,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
     #[test]
     fn test_get_unreleased_changes_from_changelog_with_no_entries() {
-        let changelog = r#"
-# Changelog
+        let changelog = r#"# Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -694,7 +677,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `name` is no longer a required field in package.json. ([#447](https://github.com/heroku/buildpacks-nodejs/pull/447))
 - Added node version 19.5.0.
-            "#;
+"#;
 
         let changelog_file = create_changelog_file(changelog);
         assert_eq!(None, changelog_file.parsed.unreleased.value);
@@ -702,8 +685,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
     #[test]
     fn test_update_changelog_from_no_entries() {
-        let changelog = r#"
-# Changelog
+        let changelog = r#"# Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -718,7 +700,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `name` is no longer a required field in package.json. ([#447](https://github.com/heroku/buildpacks-nodejs/pull/447))
 - Added node version 19.5.0.
-            "#;
+"#;
 
         let changelog_file = create_changelog_file(changelog);
         let entry = ChangelogEntry {
@@ -731,8 +713,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
         };
         assert_eq!(
             update_changelog_with_new_entry(&changelog_file, &entry),
-            r#"
-# Changelog
+            r#"# Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -757,13 +738,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
     #[test]
     fn test_get_unreleased_changes_from_changelog_initial_state() {
-        let changelog = r#"
-# Changelog
+        let changelog = r#"# Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
-            "#;
+"#;
 
         let changelog_file = create_changelog_file(changelog);
         assert_eq!(None, changelog_file.parsed.unreleased.value);
@@ -771,8 +751,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
     #[test]
     fn test_update_changelog_from_initial_state() {
-        let changelog = r#"
-# Changelog
+        let changelog = r#"# Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
@@ -790,8 +769,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
         };
         assert_eq!(
             update_changelog_with_new_entry(&changelog_file, &entry),
-            r#"
-# Changelog
+            r#"# Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
