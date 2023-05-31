@@ -14,7 +14,7 @@ outputs:
     description: The previous version
   to_version:
     description: The next version
-  unreleased_changes:
+  changelog_summary:
     description: Markdown content listing the changes about to be released
 
 runs:
