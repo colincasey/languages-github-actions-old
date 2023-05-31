@@ -16,10 +16,13 @@ use std::path::{Path, PathBuf};
 use toml::Spanned;
 
 pub(crate) fn execute(project_dir: PathBuf, bump: BumpCoordinate) -> Result<()> {
-    println!(
-        "current dir: {}",
-        std::env::current_dir().unwrap().display()
-    );
+    let project_dir = if project_dir.is_absolute() {
+        project_dir
+    } else {
+        let current_dir = std::env::current_dir().map_err(Error::GetCurrentDir)?;
+        current_dir.join(project_dir)
+    };
+
     let buildpack_dirs = find_buildpack_dirs(&project_dir)?;
 
     if buildpack_dirs.is_empty() {

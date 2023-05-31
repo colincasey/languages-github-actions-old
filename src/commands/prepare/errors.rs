@@ -8,6 +8,7 @@ use std::path::PathBuf;
 
 #[derive(Debug)]
 pub enum Error {
+    GetCurrentDir(io::Error),
     NoBuildpacksFound(PathBuf),
     NotAllVersionsMatch(HashMap<PathBuf, BuildpackVersion>),
     NoFixedVersion,
@@ -46,6 +47,9 @@ impl From<SetOutputError> for Error {
 impl Display for Error {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
+            Error::GetCurrentDir(error) => {
+                write!(f, "Failed to get current directory\nError: {error}")
+            }
             Error::NoBuildpacksFound(path) => {
                 write!(f, "No buildpacks found under {}", path.display())
             }
