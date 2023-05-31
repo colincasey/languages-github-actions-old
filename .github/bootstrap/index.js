@@ -10797,7 +10797,7 @@ var exec = __nccwpck_require__(1514);
 var tool_cache = __nccwpck_require__(7784);
 // EXTERNAL MODULE: ./node_modules/toml/index.js
 var node_modules_toml = __nccwpck_require__(4920);
-;// CONCATENATED MODULE: ./bootstrap/bootstrap.ts
+;// CONCATENATED MODULE: ./.github/bootstrap/bootstrap.ts
 
 var __awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
@@ -10828,18 +10828,21 @@ function execute_rust_binary_action(rustCommand) {
         if (platform !== 'win32' && platform !== 'darwin' && platform !== 'linux') {
             throw new Error(`Unsupported platform: ${platform}`);
         }
-        const toml = (0,node_modules_toml.parse)((0,external_node_fs_namespaceObject.readFileSync)((0,external_node_path_namespaceObject.join)(__dirname, "../Cargo.toml"), 'utf-8'));
-        const { name, repository, version } = toml.package;
+        const toml = (0,node_modules_toml.parse)((0,external_node_fs_namespaceObject.readFileSync)((0,external_node_path_namespaceObject.join)(__dirname, "../../Cargo.toml"), 'utf-8'));
+        const tempDirectory = env.RUNNER_TEMP;
+        const { repository, version } = toml.package;
+        const { name } = toml.bin[0];
+        const binaryName = platform === 'win32' ? `${name}.exe` : name;
         const githubOrgAndName = (0,external_node_url_namespaceObject.parse)(repository).pathname
             .replace(/^\//, '')
             .replace(/\.git$/, '');
+        // now we should be able to build up our download url which looks something like this:
+        // https://github.com/colincasey/languages-github-actions/releases/download/v0.0.0/actions-v0.0.0-darwin-x64.tar.gz
+        const releaseUrl = `https://github.com/${githubOrgAndName}/releases/download/v${version}/${name}-v${version}-${platform}-x64.tar.gz`;
         let cachedPath = (0,tool_cache.find)(githubOrgAndName, version);
         if (!cachedPath) {
-            const releaseUrl = `https://github.com/${githubOrgAndName}/releases/download/v${version}/${name}-v${version}-${platform}-x64.tar.gz`;
             const downloadPath = yield (0,tool_cache.downloadTool)(releaseUrl);
-            const tempDirectory = env.RUNNER_TEMP;
             const extractPath = yield (0,tool_cache.extractTar)(downloadPath, tempDirectory);
-            const binaryName = platform === 'win32' ? `${name}.exe` : name;
             const extractedFile = (0,external_node_path_namespaceObject.join)(extractPath, binaryName);
             cachedPath = yield (0,tool_cache.cacheFile)(extractedFile, binaryName, githubOrgAndName, version);
         }

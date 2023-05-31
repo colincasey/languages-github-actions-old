@@ -1,7 +1,8 @@
 [package]
 name = "languages-github-actions"
 description = "GitHub Actions for the Languages Team"
-version = "0.0.0"
+version = "0.0.1"
+repository = "https://github.com/colincasey/languages-github-actions.git"
 rust-version = "1.66"
 edition = "2021"
 publish = false
