@@ -1,3 +1,3 @@
 require('../../bootstrap').invokeWith(() => {
-    return ['list-buildpacks']
+    return ['generate-buildpack-matrix']
 })

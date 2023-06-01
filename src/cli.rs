@@ -4,7 +4,7 @@ use clap::{Parser, ValueEnum};
 #[command(bin_name = "actions")]
 pub(crate) enum Cli {
     Prepare(PrepareArgs),
-    ListBuildpacks,
+    GenerateBuildpackMatrix,
 }
 
 #[derive(Parser, Debug)]
@@ -12,7 +12,6 @@ pub(crate) enum Cli {
 pub(crate) struct PrepareArgs {
     #[arg(long, value_enum)]
     pub(crate) bump: BumpCoordinate,
-    pub(crate) project_dir: String,
 }
 
 #[derive(ValueEnum, Debug, Clone)]

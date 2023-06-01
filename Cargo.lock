@@ -313,6 +313,7 @@ dependencies = [
  "markdown",
  "rand",
  "serde",
+ "serde_json",
  "toml",
 ]
 
@@ -331,7 +332,7 @@ checksum = "99227334921fae1a979cf0bfdfcc6b3e5ce376ef57e16fb6fb3ea2ed6095f80c"
 [[package]]
 name = "libcnb-data"
 version = "0.11.5"
-source = "git+https://github.com/heroku/libcnb.rs?branch=ccasey-malax-pairing#1f09520fe913ab7ab4b17e15d54b57af77c1c388"
+source = "git+https://github.com/heroku/libcnb.rs?branch=ccasey-malax-pairing#dffcc763e07f13e702e86e1df9ca8ebdf0d1d040"
 dependencies = [
  "fancy-regex",
  "libcnb-proc-macros",
@@ -344,7 +345,7 @@ dependencies = [
 [[package]]
 name = "libcnb-package"
 version = "0.11.5"
-source = "git+https://github.com/heroku/libcnb.rs?branch=ccasey-malax-pairing#1f09520fe913ab7ab4b17e15d54b57af77c1c388"
+source = "git+https://github.com/heroku/libcnb.rs?branch=ccasey-malax-pairing#dffcc763e07f13e702e86e1df9ca8ebdf0d1d040"
 dependencies = [
  "cargo_metadata",
  "libcnb-data",
@@ -356,7 +357,7 @@ dependencies = [
 [[package]]
 name = "libcnb-proc-macros"
 version = "0.11.5"
-source = "git+https://github.com/heroku/libcnb.rs?branch=ccasey-malax-pairing#1f09520fe913ab7ab4b17e15d54b57af77c1c388"
+source = "git+https://github.com/heroku/libcnb.rs?branch=ccasey-malax-pairing#dffcc763e07f13e702e86e1df9ca8ebdf0d1d040"
 dependencies = [
  "cargo_metadata",
  "fancy-regex",
@@ -544,9 +545,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.95"
+version = "1.0.96"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d721eca97ac802aa7777b701877c8004d950fc142651367300d21c1cc0194744"
+checksum = "057d394a50403bcac12672b2b18fb387ab6d289d957dab67dd201875391e52f1"
 dependencies = [
  "itoa",
  "ryu",

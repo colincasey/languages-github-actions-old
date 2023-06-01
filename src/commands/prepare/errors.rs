@@ -25,11 +25,7 @@ pub enum Error {
 impl From<FindBuildpackDirsError> for Error {
     fn from(value: FindBuildpackDirsError) -> Self {
         match value {
-            FindBuildpackDirsError::ReadingMetadata(path, error)
-            | FindBuildpackDirsError::ReadingDir(path, error)
-            | FindBuildpackDirsError::GetDirEntry(path, error) => {
-                Error::FindingBuildpacks(path, error)
-            }
+            FindBuildpackDirsError::IO(path, error) => Error::FindingBuildpacks(path, error),
         }
     }
 }

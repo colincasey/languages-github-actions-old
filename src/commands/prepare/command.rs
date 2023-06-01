@@ -1,9 +1,9 @@
-use crate::cli::BumpCoordinate;
+use crate::cli::{BumpCoordinate, PrepareArgs};
 use crate::commands::prepare::errors::Error;
 use crate::github::actions;
 use chrono::{DateTime, Utc};
 use libcnb_data::buildpack::{BuildpackId, BuildpackVersion};
-use libcnb_package::find_buildpack_dirs;
+use libcnb_package::{find_buildpack_dirs, FindBuildpackDirsOptions};
 use markdown::mdast::Node;
 use markdown::{to_mdast, ParseOptions};
 use serde::Deserialize;
@@ -15,18 +15,17 @@ use std::ops::Range;
 use std::path::{Path, PathBuf};
 use toml::Spanned;
 
-pub(crate) fn execute(project_dir: PathBuf, bump: BumpCoordinate) -> Result<()> {
-    let project_dir = if project_dir.is_absolute() {
-        project_dir
-    } else {
-        let current_dir = std::env::current_dir().map_err(Error::GetCurrentDir)?;
-        current_dir.join(project_dir)
+pub(crate) fn execute(args: PrepareArgs) -> Result<()> {
+    let current_dir = std::env::current_dir().map_err(Error::GetCurrentDir)?;
+
+    let find_buildpack_dirs_options = FindBuildpackDirsOptions {
+        ignore: vec![current_dir.join("target")],
     };
 
-    let buildpack_dirs = find_buildpack_dirs(&project_dir)?;
+    let buildpack_dirs = find_buildpack_dirs(&current_dir, &find_buildpack_dirs_options)?;
 
     if buildpack_dirs.is_empty() {
-        Err(Error::NoBuildpacksFound(project_dir))?;
+        Err(Error::NoBuildpacksFound(current_dir))?;
     }
 
     let buildpack_files = buildpack_dirs
@@ -41,7 +40,7 @@ pub(crate) fn execute(project_dir: PathBuf, bump: BumpCoordinate) -> Result<()> 
 
     let current_version = get_fixed_version(&buildpack_files)?;
 
-    let next_version = get_next_version(&current_version, bump);
+    let next_version = get_next_version(&current_version, args.bump);
 
     let changelog_summary =
         get_changelog_summary(buildpack_files.iter().zip(changelog_files.iter()).collect());

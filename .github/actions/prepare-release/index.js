@@ -3,6 +3,5 @@ require('../../bootstrap').invokeWith(({ getInput }) => {
         'prepare',
         '--bump',
         getInput('bump', { required: true }),
-        getInput('project_dir')
     ]
 })
