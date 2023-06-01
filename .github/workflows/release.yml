@@ -58,9 +58,11 @@ jobs:
           export BINARY="./target/release/${NAME}"
 
           if [ "$OS" != "windows-latest" ]; then strip "$BINARY"; fi
-
-          if [ "$OS" != "windows-latest" ]; then tar -czf "$ASSET_PATH" -C "./target/release" "$NAME"; fi 
+          if [ "$OS" != "windows-latest" ]; then tar -czf "$ASSET_PATH" -C "./target/release" "$NAME"; fi
+          
           if [ "$OS" = "windows-latest" ]; then tar --force-local -czf "$ASSET_PATH" -C "./target/release" "$NAME"; fi
+          
+          ls $RUNNER_TEMP
           
           echo "path=${ASSET_PATH}" >> "$GITHUB_OUTPUT"
       - name: Check if tag is released
@@ -78,4 +80,5 @@ jobs:
         with:
           tag_name: v${{ steps.metadata.outputs.version }}
           files: ${{ steps.asset.outputs.path }}
+          fail_on_unmatched_files: true
           generate_release_notes: true
