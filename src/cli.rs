@@ -4,6 +4,7 @@ use clap::{Parser, ValueEnum};
 #[command(bin_name = "actions")]
 pub(crate) enum Cli {
     Prepare(PrepareArgs),
+    ListBuildpacks,
 }
 
 #[derive(Parser, Debug)]
