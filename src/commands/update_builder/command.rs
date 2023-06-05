@@ -48,7 +48,11 @@ pub(crate) fn execute(args: UpdateBuilderArgs) -> Result<()> {
                 &buildpack_uri,
             ),
         )
-        .map_err(|e| Error::WritingBuilder(builder_file.path, e))?;
+        .map_err(|e| Error::WritingBuilder(builder_file.path.clone(), e))?;
+        eprintln!(
+            "✅️ Updated {buildpack_id} for builder: {}",
+            builder_file.path.display(),
+        );
     }
 
     Ok(())
