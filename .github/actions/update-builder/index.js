@@ -2,6 +2,9 @@ require('../../bootstrap').invokeWith(({ getInput }) => {
     return [
         'update-builder',
 
+        '--path',
+        getInput('path', { required: true }),
+
         '--buildpack-id',
         getInput('buildpack-id', { required: true }),
 

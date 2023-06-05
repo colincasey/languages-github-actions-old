@@ -7,7 +7,9 @@ use toml::Spanned;
 use uriparse::URIReference;
 
 pub(crate) fn execute(args: UpdateBuilderArgs) -> Result<()> {
-    let current_dir = std::env::current_dir().map_err(Error::GetCurrentDir)?;
+    let current_dir = std::env::current_dir()
+        .map_err(Error::GetCurrentDir)
+        .map(|dir| dir.join(PathBuf::from(args.path)))?;
 
     let buildpack_id = args.buildpack_id;
 

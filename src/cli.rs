@@ -34,4 +34,6 @@ pub(crate) struct UpdateBuilderArgs {
     pub(crate) buildpack_uri: String,
     #[arg(long, required = true, value_delimiter = ',', num_args = 1..)]
     pub(crate) builders: Vec<String>,
+    #[arg(long, required = true)]
+    pub(crate) path: String,
 }
