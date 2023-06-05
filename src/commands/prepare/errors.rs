@@ -7,7 +7,7 @@ use std::io;
 use std::path::PathBuf;
 
 #[derive(Debug)]
-pub enum Error {
+pub(crate) enum Error {
     GetCurrentDir(io::Error),
     NoBuildpacksFound(PathBuf),
     NotAllVersionsMatch(HashMap<PathBuf, BuildpackVersion>),

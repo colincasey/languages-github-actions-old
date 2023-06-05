@@ -4,7 +4,7 @@ use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 
 #[derive(Debug)]
-pub enum Error {
+pub(crate) enum Error {
     GetCurrentDir(std::io::Error),
     FindingBuildpacks(PathBuf, std::io::Error),
     ReadingBuildpack(ReadBuildpackDataError),
