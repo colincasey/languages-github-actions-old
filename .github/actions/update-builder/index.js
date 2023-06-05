@@ -3,13 +3,13 @@ require('../../bootstrap').invokeWith(({ getInput }) => {
         'update-builder',
 
         '--buildpack-id',
-        getInput('buildpack_id', { required: true }),
+        getInput('buildpack-id', { required: true }),
 
         '--buildpack-version',
-        getInput('buildpack_version', { required: true }),
+        getInput('buildpack-version', { required: true }),
 
         '--buildpack-uri',
-        getInput('buildpack_uri', { required: true }),
+        getInput('buildpack-uri', { required: true }),
 
         '--builders',
         getInput('builders', { required: true }),
