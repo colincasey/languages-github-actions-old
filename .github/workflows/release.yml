@@ -51,8 +51,10 @@ jobs:
 
           export ASSET_NAME="${NAME}-v${VERSION}-${ARCH}-x64.tar.gz"
 
+          if [ "$OS" = "windows-latest" ]; then export RUNNER_TEMP="$(echo $RUNNER_TEMP | sed 's/\\/\//g')"; fi
+
           export ASSET_PATH="${RUNNER_TEMP}/${ASSET_NAME}" &&
-            if [ "$OS" = "windows-latest" ]; then export ASSET_PATH="${RUNNER_TEMP}\\${ASSET_NAME}"; fi
+            if [ "$OS" = "windows-latest" ]; then export ASSET_PATH="${RUNNER_TEMP}/${ASSET_NAME}"; fi
 
           if [ "$OS" = "windows-latest" ]; then export NAME="${NAME}.exe"; fi
 
