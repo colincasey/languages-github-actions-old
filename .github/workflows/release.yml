@@ -52,7 +52,7 @@ jobs:
           export ASSET_NAME="${NAME}-v${VERSION}-${ARCH}-x64.tar.gz"
 
           export ASSET_PATH="${RUNNER_TEMP}/${ASSET_NAME}" &&
-            if [ "$OS" = "windows-latest" ]; then export ASSET_PATH="${RUNNER_TEMP}\${ASSET_NAME}"; fi
+            if [ "$OS" = "windows-latest" ]; then export ASSET_PATH="${RUNNER_TEMP}\\${ASSET_NAME}"; fi
 
           if [ "$OS" = "windows-latest" ]; then export NAME="${NAME}.exe"; fi
 
