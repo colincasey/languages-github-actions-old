@@ -1,3 +1,4 @@
+use crate::commands::ChangelogFileError;
 use crate::github::actions::SetOutputError;
 use libcnb_package::{FindBuildpackDirsError, ReadBuildpackDataError};
 use std::fmt::{Display, Formatter};
@@ -6,8 +7,8 @@ use std::fmt::{Display, Formatter};
 pub(crate) enum Error {
     GetCurrentDir(std::io::Error),
     FindingBuildpacks(FindBuildpackDirsError),
-    ReadingBuildpackData(ReadBuildpackDataError),
-    SerializingJson(serde_json::Error),
+    GetBuildpackId(ReadBuildpackDataError),
+    ChangelogFile(ChangelogFileError),
     SetActionOutput(SetOutputError),
 }
 
@@ -29,6 +30,26 @@ impl Display for Error {
                     }
                 }
             }
+            
+            Error::GetBuildpackId(read_buildpack_data_error) => {
+                match read_buildpack_data_error {
+                    ReadBuildpackDataError::ReadingBuildpack { path, source } => {
+                        write!(
+                            f,
+                            "Error reading buildpack\nPath: {}\nError: {source}",
+                            path.display()
+                        )
+                    }
+                    
+                    ReadBuildpackDataError::ParsingBuildpack { path, source } => {
+                        write!(
+                            f,
+                            "Error parsing buildpack\nPath: {}\nError: {source}",
+                            path.display()
+                        )
+                    }
+                }
+            }
 
             Error::SetActionOutput(set_output_error) => match set_output_error {
                 SetOutputError::Opening(error) | SetOutputError::Writing(error) => {
@@ -36,25 +57,19 @@ impl Display for Error {
                 }
             },
 
-            Error::SerializingJson(error) => {
-                write!(
-                    f,
-                    "Could not serialize buildpacks into json\nError: {error}"
-                )
-            }
-
-            Error::ReadingBuildpackData(error) => match error {
-                ReadBuildpackDataError::ReadingBuildpack { path, source } => {
+            Error::ChangelogFile(changelog_file_error) => match changelog_file_error {
+                ChangelogFileError::Reading(path, error) => {
                     write!(
                         f,
-                        "Failed to read buildpack\nPath: {}\nError: {source}",
+                        "Could not read changelog\nPath: {}\nError: {error}",
                         path.display()
                     )
                 }
-                ReadBuildpackDataError::ParsingBuildpack { path, source } => {
+
+                ChangelogFileError::Parsing(path, error) => {
                     write!(
                         f,
-                        "Failed to parse buildpack\nPath: {}\nError: {source}",
+                        "Could not parse changelog\nPath: {}\nError: {error}",
                         path.display()
                     )
                 }

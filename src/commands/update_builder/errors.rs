@@ -1,3 +1,4 @@
+use crate::commands::BuilderFileError;
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 
@@ -5,8 +6,7 @@ pub(crate) enum Error {
     GetCurrentDir(std::io::Error),
     InvalidBuildpackUri(String, uriparse::URIReferenceError),
     InvalidBuildpackVersion(String, libcnb_data::buildpack::BuildpackVersionError),
-    ReadingBuilder(PathBuf, std::io::Error),
-    ParsingBuilder(PathBuf, toml::de::Error),
+    BuilderFile(BuilderFileError),
     WritingBuilder(PathBuf, std::io::Error),
     NoBuilderFiles(Vec<String>),
 }
@@ -17,32 +17,39 @@ impl Display for Error {
             Error::GetCurrentDir(error) => {
                 write!(f, "Could not get the current directory\nError: {error}")
             }
+
             Error::InvalidBuildpackUri(value, error) => {
                 write!(
                     f,
                     "The buildpack URI argument is invalid\nValue: {value}\nError: {error}"
                 )
             }
+
             Error::InvalidBuildpackVersion(value, error) => {
                 write!(
                     f,
                     "The buildpack version argument is invalid\nValue: {value}\nError: {error}"
                 )
             }
-            Error::ReadingBuilder(path, error) => {
-                write!(
-                    f,
-                    "Error reading builder\nPath: {}\nError: {error}",
-                    path.display()
-                )
-            }
-            Error::ParsingBuilder(path, error) => {
-                write!(
-                    f,
-                    "Error parsing builder\nPath: {}\nError: {error}",
-                    path.display()
-                )
-            }
+
+            Error::BuilderFile(builder_file_error) => match builder_file_error {
+                BuilderFileError::Reading(path, error) => {
+                    write!(
+                        f,
+                        "Could not read builder\nPath: {}\nError: {error}",
+                        path.display()
+                    )
+                }
+
+                BuilderFileError::Parsing(path, error) => {
+                    write!(
+                        f,
+                        "Could not parse builder\nPath: {}\nError: {error}",
+                        path.display()
+                    )
+                }
+            },
+
             Error::WritingBuilder(path, error) => {
                 write!(
                     f,
@@ -50,6 +57,7 @@ impl Display for Error {
                     path.display()
                 )
             }
+
             Error::NoBuilderFiles(builders) => {
                 write!(
                     f,

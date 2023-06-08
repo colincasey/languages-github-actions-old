@@ -11,8 +11,6 @@ outputs:
     description: The previous version
   to_version:
     description: The next version
-  changelog_summary:
-    description: Markdown content listing the changes about to be released
 
 runs:
   using: node16

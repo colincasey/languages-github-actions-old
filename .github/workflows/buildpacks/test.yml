@@ -1,0 +1,12 @@
+name: Test Shared Buildpack Workflow
+
+on:
+  workflow_call:
+
+jobs:
+  test-shared:
+    name: Test Shared
+    runs-on: ubuntu-latest
+    steps:
+      - name: Does it work
+        run: echo "Yes"

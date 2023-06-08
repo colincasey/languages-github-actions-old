@@ -1,7 +1,7 @@
 {
   "private": true,
   "scripts": {
-    "prepack": "ncc build .github/bootstrap/bootstrap.ts -o .github/bootstrap"
+    "build": "ncc build .github/bootstrap/bootstrap.ts -o .github/bootstrap"
   },
   "dependencies": {
     "@actions/core": "^1.10.0",

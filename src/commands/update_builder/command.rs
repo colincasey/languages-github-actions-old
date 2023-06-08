@@ -1,10 +1,26 @@
-use crate::cli::UpdateBuilderArgs;
+use crate::commands::{read_builder_file_from_dir, BuilderFile};
 use crate::update_builder::errors::Error;
+use clap::Parser;
 use libcnb_data::buildpack::{BuildpackId, BuildpackVersion};
-use serde::Deserialize;
 use std::path::PathBuf;
-use toml::Spanned;
 use uriparse::URIReference;
+
+type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+pub(crate) struct UpdateBuilderArgs {
+    #[arg(long)]
+    pub(crate) buildpack_id: BuildpackId,
+    #[arg(long)]
+    pub(crate) buildpack_version: String,
+    #[arg(long)]
+    pub(crate) buildpack_uri: String,
+    #[arg(long, required = true, value_delimiter = ',', num_args = 1..)]
+    pub(crate) builders: Vec<String>,
+    #[arg(long, required = true)]
+    pub(crate) path: String,
+}
 
 pub(crate) fn execute(args: UpdateBuilderArgs) -> Result<()> {
     let current_dir = std::env::current_dir()
@@ -23,14 +39,7 @@ pub(crate) fn execute(args: UpdateBuilderArgs) -> Result<()> {
         .builders
         .iter()
         .map(|builder| {
-            let path = current_dir.join(builder).join("builder.toml");
-            std::fs::read_to_string(&path)
-                .map_err(|e| Error::ReadingBuilder(path.clone(), e))
-                .and_then(|raw| {
-                    toml::from_str(&raw)
-                        .map_err(|e| Error::ParsingBuilder(path.clone(), e))
-                        .map(|parsed| BuilderFile { path, raw, parsed })
-                })
+            read_builder_file_from_dir(current_dir.join(builder)).map_err(Error::BuilderFile)
         })
         .collect::<Result<Vec<_>>>()?;
 
@@ -91,37 +100,6 @@ fn update_builder_contents_with_buildpack(
     }
 
     new_contents
-}
-
-type Result<T> = std::result::Result<T, Error>;
-
-struct BuilderFile {
-    path: PathBuf,
-    raw: String,
-    parsed: MinimalBuilder,
-}
-
-#[derive(Debug, Deserialize)]
-struct MinimalBuilder {
-    buildpacks: Vec<BuilderBuildpack>,
-    order: Vec<BuilderOrder>,
-}
-
-#[derive(Debug, Deserialize)]
-struct BuilderBuildpack {
-    id: BuildpackId,
-    uri: Spanned<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct BuilderOrder {
-    group: Vec<BuilderOrderGroup>,
-}
-
-#[derive(Debug, Deserialize)]
-struct BuilderOrderGroup {
-    id: BuildpackId,
-    version: Spanned<BuildpackVersion>,
 }
 
 #[cfg(test)]

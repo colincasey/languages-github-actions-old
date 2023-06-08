@@ -7,6 +7,14 @@ on:
         description: "Bump"
         required: true
         type: string
+      app_id:
+        description: "GitHub application ID"
+        required: true
+        type: string
+      app_private_key:
+        description: "Private key of the GitHub application"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -20,15 +28,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       - name: Prepare
-        id: prepare
-        uses: colincasey/languages-github-actions/.github/actions/prepare-release@main
+        id: prepare_release
+        uses: colincasey/languages-github-actions/.github/actions/prepare_release-release@main
         with:
           bump: ${{ inputs.bump }}
+      - uses: tibdex/github-app-token@v1
+        id: generate-token
+        with:
+          app_id: ${{ inputs.app_id }}
+          private_key: ${{ inputs.app_private_key }}
       - name: Create Pull Request
+        id: pr
         uses: peter-evans/create-pull-request@v5
         with:
-          title: Prepare release v${{ steps.prepare.outputs.to_version }}
-          commit-message: Prepare release v${{ steps.prepare.outputs.to_version }}
-          branch: release/v${{ steps.prepare.outputs.to_version }}
-          body: ${{ steps.prepare.outputs.changelog_summary }}
+          token: ${{ steps.generate-token.outputs.token }}
+          title: Prepare release v${{ steps.prepare_release.outputs.to_version }}
+          commit-message: Prepare release v${{ steps.prepare_release.outputs.to_version }}
+          branch: release/v${{ steps.prepare_release.outputs.to_version }}
+          body: ${{ steps.prepare_release.outputs.changelog_summary }}
           labels: "automation"
+      - name: Configure PR
+        if: steps.pr.outputs.pull-request-operation == 'created'
+        run: gh pr merge --auto --squash "${{ steps.pr.outputs.pull-request-number }}"
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}

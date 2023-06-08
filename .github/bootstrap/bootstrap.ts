@@ -1,3 +1,7 @@
+/**
+ * IMPORTANT! If you change this file be sure to regenerate the compiled version with `npm run build`
+ */
+
 "use strict";
 
 import { readFileSync } from "node:fs"

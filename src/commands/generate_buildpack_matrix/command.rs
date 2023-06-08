@@ -3,6 +3,8 @@ use crate::github::actions;
 use libcnb_package::{find_buildpack_dirs, read_buildpack_data, FindBuildpackDirsOptions};
 use std::collections::HashMap;
 
+type Result<T> = std::result::Result<T, Error>;
+
 pub(crate) fn execute() -> Result<()> {
     let current_dir = std::env::current_dir().map_err(Error::GetCurrentDir)?;
 
@@ -10,11 +12,12 @@ pub(crate) fn execute() -> Result<()> {
         ignore: vec![current_dir.join("target")],
     };
 
-    let buildpacks = find_buildpack_dirs(&current_dir, &find_buildpack_dirs_options)?
+    let buildpacks = find_buildpack_dirs(&current_dir, &find_buildpack_dirs_options)
+        .map_err(Error::FindingBuildpacks)?
         .into_iter()
         .map(|dir| {
             read_buildpack_data(&dir)
-                .map_err(Error::ReadingBuildpack)
+                .map_err(Error::ReadingBuildpackData)
                 .map(|data| {
                     HashMap::from([
                         ("id", data.buildpack_descriptor.buildpack().id.to_string()),
@@ -24,10 +27,9 @@ pub(crate) fn execute() -> Result<()> {
         })
         .collect::<Result<Vec<_>>>()?;
 
-    let json = serde_json::to_string(&buildpacks)?;
-    actions::set_output("buildpacks", json)?;
+    let json = serde_json::to_string(&buildpacks).map_err(Error::SerializingJson)?;
+
+    actions::set_output("buildpacks", json).map_err(Error::SetActionOutput)?;
 
     Ok(())
 }
-
-type Result<T> = std::result::Result<T, Error>;

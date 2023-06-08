@@ -10798,6 +10798,9 @@ var tool_cache = __nccwpck_require__(7784);
 // EXTERNAL MODULE: ./node_modules/toml/index.js
 var node_modules_toml = __nccwpck_require__(4920);
 ;// CONCATENATED MODULE: ./.github/bootstrap/bootstrap.ts
+/**
+ * IMPORTANT! If you change this file be sure to regenerate the compiled version with `npm run build`
+ */
 
 var __awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }

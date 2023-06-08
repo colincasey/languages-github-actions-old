@@ -33,6 +33,7 @@ pub(crate) fn set_output<N: Into<String>, V: Into<String>>(
         .map_err(SetOutputError::Writing)
 }
 
+#[derive(Debug)]
 pub(crate) enum SetOutputError {
     Opening(io::Error),
     Writing(io::Error),
