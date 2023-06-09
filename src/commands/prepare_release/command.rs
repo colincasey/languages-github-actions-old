@@ -61,15 +61,24 @@ pub(crate) fn execute(args: PrepareReleaseArgs) -> Result<()> {
         .collect::<Vec<_>>();
 
     for (buildpack_file, changelog_file) in buildpack_files.into_iter().zip(changelog_files) {
-        write(
-            &buildpack_file.path,
-            update_buildpack_contents_with_new_version(
-                &buildpack_file,
-                &next_version,
-                &local_dependencies,
-            ),
-        )
-        .map_err(|e| Error::WritingBuildpack(buildpack_file.path.clone(), e))?;
+        let updated_dependencies = buildpack_file
+            .parsed
+            .order
+            .iter()
+            .flat_map(|order_item| &order_item.group)
+            .map(|group_item| group_item.id.clone())
+            .filter(|buildpack_id| local_dependencies.contains(buildpack_id))
+            .collect::<Vec<_>>();
+
+        let new_buildpack_contents = update_buildpack_contents_with_new_version(
+            &buildpack_file,
+            &next_version,
+            &updated_dependencies,
+        );
+
+        write(&buildpack_file.path, new_buildpack_contents)
+            .map_err(|e| Error::WritingBuildpack(buildpack_file.path.clone(), e))?;
+
         eprintln!(
             "✅️ Updated version {current_version} → {next_version}: {}",
             buildpack_file.path.display(),
@@ -79,11 +88,16 @@ pub(crate) fn execute(args: PrepareReleaseArgs) -> Result<()> {
             version: next_version.clone(),
             date: Utc::now(),
         };
-        write(
-            &changelog_file.path,
-            update_changelog_with_new_entry(&changelog_file, &changelog_entry),
-        )
-        .map_err(|e| Error::WritingChangelog(changelog_file.path.clone(), e))?;
+        let new_changelog_contents =
+            update_changelog_by_moving_unreleased_to_new_entry_and_inserting_dependency_changes(
+                &changelog_file,
+                &changelog_entry,
+                &updated_dependencies,
+                &next_version,
+            );
+        write(&changelog_file.path, new_changelog_contents)
+            .map_err(|e| Error::WritingChangelog(changelog_file.path.clone(), e))?;
+
         eprintln!(
             "✅️ Added changelog entry \"{changelog_entry}: {}",
             changelog_file.path.display()
@@ -147,23 +161,21 @@ fn get_next_version(current_version: &BuildpackVersion, bump: BumpCoordinate) ->
 fn update_buildpack_contents_with_new_version(
     buildpack_file: &BuildpackFile,
     next_version: &BuildpackVersion,
-    local_dependencies: &[BuildpackId],
+    updated_dependencies: &[BuildpackId],
 ) -> String {
-    let contents = &buildpack_file.raw;
+    let mut new_contents = buildpack_file.raw.to_string();
     let metadata = &buildpack_file.parsed.buildpack;
-    let start = metadata.version.span().start;
-    let end = metadata.version.span().end;
 
-    let mut new_contents = format!(
+    new_contents = format!(
         "{}\"{}\"{}",
-        &contents[..start],
+        &new_contents[..metadata.version.span().start],
         next_version,
-        &contents[end..]
+        &new_contents[metadata.version.span().end..]
     );
 
     for order_item in &buildpack_file.parsed.order {
         for group_item in &order_item.group {
-            if local_dependencies.contains(&group_item.id) {
+            if updated_dependencies.contains(&group_item.id) {
                 new_contents = format!(
                     "{}\"{}\"{}",
                     &new_contents[..group_item.version.span().start],
@@ -177,22 +189,42 @@ fn update_buildpack_contents_with_new_version(
     new_contents
 }
 
-fn update_changelog_with_new_entry(
+fn update_changelog_by_moving_unreleased_to_new_entry_and_inserting_dependency_changes(
     changelog_file: &ChangelogFile,
     changelog_entry: &ChangelogEntry,
+    updated_dependencies: &[BuildpackId],
+    next_version: &BuildpackVersion,
 ) -> String {
     let changelog = &changelog_file.parsed;
     let contents = &changelog_file.raw;
     let unreleased = &changelog.unreleased;
-    let start = changelog.unreleased.span.start;
-    let end = changelog.unreleased.span.end;
-    let value = format!(
+
+    let new_entry_content = if updated_dependencies.is_empty() {
+        format!("{changelog_entry}\n\n{unreleased}")
+    } else {
+        let dependency_changes_text = updated_dependencies
+            .iter()
+            .map(|buildpack_id| format!("- Upgraded `{buildpack_id}` to `{next_version}`"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        match &unreleased.value {
+            Some(unreleased_changes) => format!(
+                "{changelog_entry}\n\n{}\n{}",
+                unreleased_changes.trim_end(),
+                dependency_changes_text
+            ),
+            None => format!("{changelog_entry}\n\n{dependency_changes_text}"),
+        }
+    };
+
+    let new_contents = format!(
         "{}\n\n{}\n\n{}\n",
-        contents[..start].trim(),
-        format!("{changelog_entry}\n\n{unreleased}").trim(),
-        contents[end..].trim()
+        contents[..changelog.unreleased.span.start].trim(),
+        new_entry_content.trim(),
+        contents[changelog.unreleased.span.end..].trim()
     );
-    format!("{}\n", value.trim_end())
+
+    format!("{}\n", new_contents.trim_end())
 }
 
 #[cfg(test)]
@@ -200,7 +232,8 @@ mod test {
     use crate::commands::parse_changelog;
     use crate::commands::prepare_release::command::{
         get_fixed_version, update_buildpack_contents_with_new_version,
-        update_changelog_with_new_entry, BuildpackFile, ChangelogEntry, ChangelogFile,
+        update_changelog_by_moving_unreleased_to_new_entry_and_inserting_dependency_changes,
+        BuildpackFile, ChangelogEntry, ChangelogFile,
     };
     use crate::commands::prepare_release::errors::Error;
     use chrono::{TimeZone, Utc};
@@ -386,8 +419,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
             },
             date: Utc.with_ymd_and_hms(2023, 5, 29, 0, 0, 0).unwrap(),
         };
+        let updated_dependencies = vec![];
+        let next_version = BuildpackVersion {
+            major: 1,
+            minor: 0,
+            patch: 0,
+        };
         assert_eq!(
-            update_changelog_with_new_entry(&changelog_file, &entry),
+            update_changelog_by_moving_unreleased_to_new_entry_and_inserting_dependency_changes(
+                &changelog_file,
+                &entry,
+                &updated_dependencies,
+                &next_version
+            ),
             r#"# Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -441,8 +485,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
             },
             date: Utc.with_ymd_and_hms(2023, 5, 29, 0, 0, 0).unwrap(),
         };
+        let updated_dependencies = vec![];
+        let next_version = BuildpackVersion {
+            major: 1,
+            minor: 0,
+            patch: 0,
+        };
         assert_eq!(
-            update_changelog_with_new_entry(&changelog_file, &entry),
+            update_changelog_by_moving_unreleased_to_new_entry_and_inserting_dependency_changes(
+                &changelog_file,
+                &entry,
+                &updated_dependencies,
+                &next_version
+            ),
             r#"# Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -495,8 +550,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
             },
             date: Utc.with_ymd_and_hms(2023, 5, 29, 0, 0, 0).unwrap(),
         };
+        let updated_dependencies = vec![];
+        let next_version = BuildpackVersion {
+            major: 1,
+            minor: 0,
+            patch: 0,
+        };
         assert_eq!(
-            update_changelog_with_new_entry(&changelog_file, &entry),
+            update_changelog_by_moving_unreleased_to_new_entry_and_inserting_dependency_changes(
+                &changelog_file,
+                &entry,
+                &updated_dependencies,
+                &next_version
+            ),
             r#"# Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -538,8 +604,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
             },
             date: Utc.with_ymd_and_hms(2023, 5, 29, 0, 0, 0).unwrap(),
         };
+        let updated_dependencies = vec![];
+        let next_version = BuildpackVersion {
+            major: 1,
+            minor: 0,
+            patch: 0,
+        };
         assert_eq!(
-            update_changelog_with_new_entry(&changelog_file, &entry),
+            update_changelog_by_moving_unreleased_to_new_entry_and_inserting_dependency_changes(
+                &changelog_file,
+                &entry,
+                &updated_dependencies,
+                &next_version
+            ),
             r#"# Changelog
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -566,13 +643,97 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
             },
             date: Utc.with_ymd_and_hms(2023, 5, 29, 0, 0, 0).unwrap(),
         };
+        let updated_dependencies = vec![];
+        let next_version = BuildpackVersion {
+            major: 1,
+            minor: 0,
+            patch: 0,
+        };
         assert_eq!(
-            update_changelog_with_new_entry(&changelog_file, &entry),
+            update_changelog_by_moving_unreleased_to_new_entry_and_inserting_dependency_changes(
+                &changelog_file,
+                &entry,
+                &updated_dependencies,
+                &next_version
+            ),
             r#"## [Unreleased]
 
 ## [0.0.1] 2023/05/29
 
 - No Changes
+"#
+        );
+    }
+
+    #[test]
+    fn test_update_changelog_with_updated_dependencies() {
+        let changelog = "## [Unreleased]";
+
+        let changelog_file = create_changelog_file(changelog);
+        let entry = ChangelogEntry {
+            version: BuildpackVersion {
+                major: 0,
+                minor: 0,
+                patch: 1,
+            },
+            date: Utc.with_ymd_and_hms(2023, 5, 29, 0, 0, 0).unwrap(),
+        };
+        let updated_dependencies = vec![buildpack_id!("buildpack-a"), buildpack_id!("buildpack-b")];
+        let next_version = BuildpackVersion {
+            major: 1,
+            minor: 0,
+            patch: 0,
+        };
+        assert_eq!(
+            update_changelog_by_moving_unreleased_to_new_entry_and_inserting_dependency_changes(
+                &changelog_file,
+                &entry,
+                &updated_dependencies,
+                &next_version
+            ),
+            r#"## [Unreleased]
+
+## [0.0.1] 2023/05/29
+
+- Upgraded `buildpack-a` to `1.0.0`
+- Upgraded `buildpack-b` to `1.0.0`
+"#
+        );
+    }
+
+    #[test]
+    fn test_update_changelog_with_updated_dependencies_and_existing_changes() {
+        let changelog = "## [Unreleased]\n\n- Existing Change";
+
+        let changelog_file = create_changelog_file(changelog);
+        let entry = ChangelogEntry {
+            version: BuildpackVersion {
+                major: 0,
+                minor: 0,
+                patch: 1,
+            },
+            date: Utc.with_ymd_and_hms(2023, 5, 29, 0, 0, 0).unwrap(),
+        };
+        let updated_dependencies = vec![buildpack_id!("buildpack-a"), buildpack_id!("buildpack-b")];
+        let next_version = BuildpackVersion {
+            major: 1,
+            minor: 0,
+            patch: 0,
+        };
+        assert_eq!(
+            update_changelog_by_moving_unreleased_to_new_entry_and_inserting_dependency_changes(
+                &changelog_file,
+                &entry,
+                &updated_dependencies,
+                &next_version
+            ),
+            r#"## [Unreleased]
+
+## [0.0.1] 2023/05/29
+
+- Existing Change
+- Upgraded `buildpack-a` to `1.0.0`
+- Upgraded `buildpack-b` to `1.0.0`
 "#
         );
     }
