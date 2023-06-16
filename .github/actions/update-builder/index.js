@@ -6,13 +6,13 @@ require('../../bootstrap').invokeWith(({ getInput }) => {
         getInput('path', { required: true }),
 
         '--buildpack-id',
-        getInput('buildpack-id', { required: true }),
+        getInput('buildpack_id', { required: true }),
 
         '--buildpack-version',
-        getInput('buildpack-version', { required: true }),
+        getInput('buildpack_version', { required: true }),
 
         '--buildpack-uri',
-        getInput('buildpack-uri', { required: true }),
+        getInput('buildpack_uri', { required: true }),
 
         '--builders',
         getInput('builders', { required: true }),

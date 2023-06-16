@@ -2,13 +2,13 @@ name: Update Builder
 description: "Prepares a buildpack release by bumping the fixed version and updating changelogs"
 
 inputs:
-  buildpack-id:
+  buildpack_id:
     description: The id of the buildpack
     required: true
-  buildpack-version:
+  buildpack_version:
     description: The version of the buildpack
     required: true
-  buildpack-uri:
+  buildpack_uri:
     description: The URI of the published buildpack
     required: true
   builders:
