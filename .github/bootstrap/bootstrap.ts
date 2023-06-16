@@ -77,7 +77,7 @@ async function executeRustBinaryAction(getArgs: GetArguments) {
     info(`using binary: ${rustBinary}`)
 
     const args = getArgs({ getInput, getBooleanInput, getMultilineInput });
-    info(`~using args: ${args.join(" ")}`)
+    info(`using args: ${args.join(" ")}`)
 
     endGroup()
 
