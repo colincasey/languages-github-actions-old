@@ -123,7 +123,7 @@ pub(crate) fn execute(args: PrepareReleaseArgs) -> Result<()> {
             .map_err(|e| Error::WritingChangelog(changelog_file.path.clone(), e))?;
 
         eprintln!(
-            "✅️ Added release entry \"{next_version}: {}",
+            "✅️ Added release entry {next_version}: {}",
             changelog_file.path.display()
         );
     }
