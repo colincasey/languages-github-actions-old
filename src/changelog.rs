@@ -328,7 +328,7 @@ mod test {
     #[test]
     fn test_keep_a_changelog_parses_all_release_entries() {
         let changelog = Changelog::try_from(KEEP_A_CHANGELOG_1_0_0).unwrap();
-        let releases = changelog.releases.keys().into_iter().collect::<Vec<_>>();
+        let releases = changelog.releases.keys().collect::<Vec<_>>();
         assert_eq!(
             releases,
             vec![
