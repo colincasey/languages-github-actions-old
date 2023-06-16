@@ -53,6 +53,8 @@ jobs:
         with:
           node-version: lts/*
           cache: npm
+      - name: Install Node dependencies
+        run: npm ci
       - name: Rebuild bootstrap script
         run: npm run build
       - name: Check bootstrap script for uncommitted changes
