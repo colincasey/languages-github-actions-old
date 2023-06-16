@@ -1,12 +1,14 @@
-use crate::commands::BuilderFileError;
 use std::fmt::{Display, Formatter};
 use std::path::PathBuf;
 
+#[derive(Debug)]
 pub(crate) enum Error {
     GetCurrentDir(std::io::Error),
     InvalidBuildpackUri(String, uriparse::URIReferenceError),
     InvalidBuildpackVersion(String, libcnb_data::buildpack::BuildpackVersionError),
-    BuilderFile(BuilderFileError),
+    ReadingBuilder(PathBuf, std::io::Error),
+    ParsingBuilder(PathBuf, toml_edit::TomlError),
+    BuilderMissingRequiredKey(PathBuf, String),
     WritingBuilder(PathBuf, std::io::Error),
     NoBuilderFiles(Vec<String>),
 }
@@ -32,23 +34,29 @@ impl Display for Error {
                 )
             }
 
-            Error::BuilderFile(builder_file_error) => match builder_file_error {
-                BuilderFileError::Reading(path, error) => {
-                    write!(
-                        f,
-                        "Could not read builder\nPath: {}\nError: {error}",
-                        path.display()
-                    )
-                }
+            Error::ReadingBuilder(path, error) => {
+                write!(
+                    f,
+                    "Could not read builder\nPath: {}\nError: {error}",
+                    path.display()
+                )
+            }
 
-                BuilderFileError::Parsing(path, error) => {
-                    write!(
-                        f,
-                        "Could not parse builder\nPath: {}\nError: {error}",
-                        path.display()
-                    )
-                }
-            },
+            Error::ParsingBuilder(path, error) => {
+                write!(
+                    f,
+                    "Could not parse builder\nPath: {}\nError: {error}",
+                    path.display()
+                )
+            }
+
+            Error::BuilderMissingRequiredKey(path, key) => {
+                write!(
+                    f,
+                    "Missing required key `{key}` in builder\nPath: {}",
+                    path.display()
+                )
+            }
 
             Error::WritingBuilder(path, error) => {
                 write!(
@@ -63,7 +71,7 @@ impl Display for Error {
                     f,
                     "No builder.toml files found in the given builder directories\n{}",
                     builders
-                        .into_iter()
+                        .iter()
                         .map(|builder| format!("• {builder}"))
                         .collect::<Vec<_>>()
                         .join("\n")

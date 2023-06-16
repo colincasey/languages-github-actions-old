@@ -1,10 +1,11 @@
+use crate::changelog::Changelog;
 use crate::commands::generate_changelog::errors::Error;
-use crate::commands::{read_changelog_file_from_dir, ChangelogEntrySection};
 use crate::github::actions;
 use clap::Parser;
 use libcnb_data::buildpack::BuildpackId;
 use libcnb_package::{find_buildpack_dirs, read_buildpack_data, FindBuildpackDirsOptions};
 use std::collections::{BTreeMap, HashMap};
+use std::path::PathBuf;
 
 type Result<T> = std::result::Result<T, Error>;
 
@@ -17,6 +18,11 @@ pub(crate) struct GenerateChangelogArgs {
     version: Option<String>,
 }
 
+enum ChangelogEntryType {
+    Unreleased,
+    Version(String),
+}
+
 pub(crate) fn execute(args: GenerateChangelogArgs) -> Result<()> {
     let current_dir = std::env::current_dir().map_err(Error::GetCurrentDir)?;
 
@@ -27,6 +33,11 @@ pub(crate) fn execute(args: GenerateChangelogArgs) -> Result<()> {
     let buildpack_dirs = find_buildpack_dirs(&current_dir, &find_buildpack_dirs_options)
         .map_err(Error::FindingBuildpacks)?;
 
+    let changelog_entry_type = match args.version {
+        Some(version) => ChangelogEntryType::Version(version),
+        None => ChangelogEntryType::Unreleased,
+    };
+
     let changes_by_buildpack = buildpack_dirs
         .iter()
         .map(|dir| {
@@ -34,19 +45,8 @@ pub(crate) fn execute(args: GenerateChangelogArgs) -> Result<()> {
                 .map_err(Error::GetBuildpackId)
                 .map(|data| data.buildpack_descriptor.buildpack().id.clone())
                 .and_then(|buildpack_id| {
-                    read_changelog_file_from_dir(dir)
-                        .map_err(Error::ChangelogFile)
-                        .map(|changelog| {
-                            (
-                                buildpack_id,
-                                match &args.version {
-                                    Some(version) => {
-                                        changelog.parsed.versions.get(version).cloned()
-                                    }
-                                    None => Some(&changelog.parsed.unreleased).cloned(),
-                                },
-                            )
-                        })
+                    read_changelog_entry(dir.join("CHANGELOG.md"), &changelog_entry_type)
+                        .map(|contents| (buildpack_id, contents))
                 })
         })
         .collect::<Result<HashMap<_, _>>>()?;
@@ -58,8 +58,25 @@ pub(crate) fn execute(args: GenerateChangelogArgs) -> Result<()> {
     Ok(())
 }
 
+fn read_changelog_entry(
+    path: PathBuf,
+    changelog_entry_type: &ChangelogEntryType,
+) -> Result<Option<Option<String>>> {
+    let contents =
+        std::fs::read_to_string(&path).map_err(|e| Error::ReadingChangelog(path.clone(), e))?;
+    let changelog = Changelog::try_from(contents.as_str())
+        .map_err(|e| Error::ParsingChangelog(path.clone(), e))?;
+    Ok(match changelog_entry_type {
+        ChangelogEntryType::Unreleased => Some(changelog.unreleased),
+        ChangelogEntryType::Version(version) => changelog
+            .releases
+            .get(version)
+            .map(|entry| Some(entry.body.clone())),
+    })
+}
+
 fn generate_changelog(
-    changes_by_buildpack: &HashMap<BuildpackId, Option<ChangelogEntrySection>>,
+    changes_by_buildpack: &HashMap<BuildpackId, Option<Option<String>>>,
 ) -> String {
     let changelog = changes_by_buildpack
         .iter()
@@ -67,9 +84,10 @@ fn generate_changelog(
         .collect::<BTreeMap<_, _>>()
         .into_iter()
         .filter_map(|(buildpack_id, changes)| {
-            changes
-                .as_ref()
-                .map(|section| format!("# {buildpack_id}\n\n{section}"))
+            changes.as_ref().map(|contents| match contents {
+                Some(value) => format!("# {buildpack_id}\n\n{value}"),
+                None => format!("# {buildpack_id}\n\n- No changes"),
+            })
         })
         .collect::<Vec<_>>()
         .join("\n\n");
@@ -79,35 +97,19 @@ fn generate_changelog(
 #[cfg(test)]
 mod test {
     use crate::commands::generate_changelog::command::generate_changelog;
-    use crate::commands::ChangelogEntrySection;
     use libcnb_data::buildpack_id;
     use std::collections::HashMap;
 
     #[test]
     fn test_generating_changelog() {
         let values = HashMap::from([
-            (
-                buildpack_id!("c"),
-                Some(ChangelogEntrySection {
-                    span: 0..0,
-                    value: Some("- change c.1".to_string()),
-                }),
-            ),
+            (buildpack_id!("c"), Some(Some("- change c.1".to_string()))),
             (
                 buildpack_id!("a"),
-                Some(ChangelogEntrySection {
-                    span: 0..0,
-                    value: Some("- change a.1\n- change a.2".to_string()),
-                }),
+                Some(Some("- change a.1\n- change a.2".to_string())),
             ),
             (buildpack_id!("b"), None),
-            (
-                buildpack_id!("d"),
-                Some(ChangelogEntrySection {
-                    span: 0..0,
-                    value: None,
-                }),
-            ),
+            (buildpack_id!("d"), Some(None)),
         ]);
 
         assert_eq!(
@@ -123,7 +125,7 @@ mod test {
 
 # d
 
-- No Changes
+- No changes
 
 "#
         )

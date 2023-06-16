@@ -4,5 +4,8 @@ require('../../bootstrap').invokeWith(({ getInput }) => {
         
         '--bump',
         getInput('bump', { required: true }),
+
+        '--repository-url',
+        getInput('repository-url')
     ]
 })

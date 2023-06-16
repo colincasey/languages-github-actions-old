@@ -1,14 +1,16 @@
-use crate::commands::ChangelogFileError;
+use crate::changelog::ChangelogError;
 use crate::github::actions::SetOutputError;
 use libcnb_package::{FindBuildpackDirsError, ReadBuildpackDataError};
 use std::fmt::{Display, Formatter};
+use std::path::PathBuf;
 
 #[derive(Debug)]
 pub(crate) enum Error {
     GetCurrentDir(std::io::Error),
     FindingBuildpacks(FindBuildpackDirsError),
     GetBuildpackId(ReadBuildpackDataError),
-    ChangelogFile(ChangelogFileError),
+    ReadingChangelog(PathBuf, std::io::Error),
+    ParsingChangelog(PathBuf, ChangelogError),
     SetActionOutput(SetOutputError),
 }
 
@@ -30,26 +32,24 @@ impl Display for Error {
                     }
                 }
             }
-            
-            Error::GetBuildpackId(read_buildpack_data_error) => {
-                match read_buildpack_data_error {
-                    ReadBuildpackDataError::ReadingBuildpack { path, source } => {
-                        write!(
-                            f,
-                            "Error reading buildpack\nPath: {}\nError: {source}",
-                            path.display()
-                        )
-                    }
-                    
-                    ReadBuildpackDataError::ParsingBuildpack { path, source } => {
-                        write!(
-                            f,
-                            "Error parsing buildpack\nPath: {}\nError: {source}",
-                            path.display()
-                        )
-                    }
+
+            Error::GetBuildpackId(read_buildpack_data_error) => match read_buildpack_data_error {
+                ReadBuildpackDataError::ReadingBuildpack { path, source } => {
+                    write!(
+                        f,
+                        "Error reading buildpack\nPath: {}\nError: {source}",
+                        path.display()
+                    )
                 }
-            }
+
+                ReadBuildpackDataError::ParsingBuildpack { path, source } => {
+                    write!(
+                        f,
+                        "Error parsing buildpack\nPath: {}\nError: {source}",
+                        path.display()
+                    )
+                }
+            },
 
             Error::SetActionOutput(set_output_error) => match set_output_error {
                 SetOutputError::Opening(error) | SetOutputError::Writing(error) => {
@@ -57,23 +57,21 @@ impl Display for Error {
                 }
             },
 
-            Error::ChangelogFile(changelog_file_error) => match changelog_file_error {
-                ChangelogFileError::Reading(path, error) => {
-                    write!(
-                        f,
-                        "Could not read changelog\nPath: {}\nError: {error}",
-                        path.display()
-                    )
-                }
+            Error::ReadingChangelog(path, error) => {
+                write!(
+                    f,
+                    "Could not read changelog\nPath: {}\nError: {error}",
+                    path.display()
+                )
+            }
 
-                ChangelogFileError::Parsing(path, error) => {
-                    write!(
-                        f,
-                        "Could not parse changelog\nPath: {}\nError: {error}",
-                        path.display()
-                    )
-                }
-            },
+            Error::ParsingChangelog(path, error) => {
+                write!(
+                    f,
+                    "Could not parse changelog\nPath: {}\nError: {error}",
+                    path.display()
+                )
+            }
         }
     }
 }

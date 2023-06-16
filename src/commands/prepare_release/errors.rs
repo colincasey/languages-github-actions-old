@@ -1,4 +1,4 @@
-use crate::commands::{BuildpackFileError, ChangelogFileError};
+use crate::changelog::ChangelogError;
 use crate::github::actions::SetOutputError;
 use libcnb_data::buildpack::BuildpackVersion;
 use libcnb_package::FindBuildpackDirsError;
@@ -6,16 +6,23 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::io;
 use std::path::PathBuf;
+use uriparse::URIError;
 
 #[derive(Debug)]
 pub(crate) enum Error {
     GetCurrentDir(io::Error),
+    InvalidRepositoryUrl(String, URIError),
     NoBuildpacksFound(PathBuf),
     NotAllVersionsMatch(HashMap<PathBuf, BuildpackVersion>),
     NoFixedVersion,
     FindingBuildpacks(FindBuildpackDirsError),
-    BuildpackFile(BuildpackFileError),
-    ChangelogFile(ChangelogFileError),
+    ReadingChangelog(PathBuf, io::Error),
+    ParsingChangelog(PathBuf, ChangelogError),
+    ReadingBuildpack(PathBuf, io::Error),
+    ParsingBuildpack(PathBuf, toml_edit::TomlError),
+    MissingRequiredField(PathBuf, String),
+    InvalidBuildpackId(PathBuf, String),
+    InvalidBuildpackVersion(PathBuf, String),
     WritingBuildpack(PathBuf, io::Error),
     WritingChangelog(PathBuf, io::Error),
     SetActionOutput(SetOutputError),
@@ -26,6 +33,10 @@ impl Display for Error {
         match self {
             Error::GetCurrentDir(error) => {
                 write!(f, "Failed to get current directory\nError: {error}")
+            }
+
+            Error::InvalidRepositoryUrl(value, error) => {
+                write!(f, "Invalid URL `{value}`\nError: {error}")
             }
 
             Error::NoBuildpacksFound(path) => {
@@ -59,24 +70,20 @@ impl Display for Error {
                     }
                 }
             }
-
-            Error::BuildpackFile(buildpack_file_error) => match buildpack_file_error {
-                BuildpackFileError::Reading(path, error) => {
-                    write!(
-                        f,
-                        "Could not read buildpack\nPath: {}\nError: {error}",
-                        path.display()
-                    )
-                }
-
-                BuildpackFileError::Parsing(path, error) => {
-                    write!(
-                        f,
-                        "Could not parse buildpack\nPath: {}\nError: {error}",
-                        path.display()
-                    )
-                }
-            },
+            Error::ReadingBuildpack(path, error) => {
+                write!(
+                    f,
+                    "Could not read buildpack\nPath: {}\nError: {error}",
+                    path.display()
+                )
+            }
+            Error::ParsingBuildpack(path, error) => {
+                write!(
+                    f,
+                    "Could not parse buildpack\nPath: {}\nError: {error}",
+                    path.display()
+                )
+            }
 
             Error::WritingBuildpack(path, error) => {
                 write!(
@@ -86,23 +93,21 @@ impl Display for Error {
                 )
             }
 
-            Error::ChangelogFile(changelog_file_error) => match changelog_file_error {
-                ChangelogFileError::Reading(path, error) => {
-                    write!(
-                        f,
-                        "Could not read changelog\nPath: {}\nError: {error}",
-                        path.display()
-                    )
-                }
+            Error::ReadingChangelog(path, error) => {
+                write!(
+                    f,
+                    "Could not read changelog\nPath: {}\nError: {error}",
+                    path.display()
+                )
+            }
 
-                ChangelogFileError::Parsing(path, error) => {
-                    write!(
-                        f,
-                        "Could not parse changelog\nPath: {}\nError: {error}",
-                        path.display()
-                    )
-                }
-            },
+            Error::ParsingChangelog(path, error) => {
+                write!(
+                    f,
+                    "Could not parse changelog\nPath: {}\nError: {error}",
+                    path.display()
+                )
+            }
 
             Error::WritingChangelog(path, error) => {
                 write!(
@@ -117,6 +122,30 @@ impl Display for Error {
                     write!(f, "Could not write action output\nError: {error}")
                 }
             },
+
+            Error::MissingRequiredField(path, field) => {
+                write!(
+                    f,
+                    "Missing required field `{field}` in buildpack.toml\nPath: {}",
+                    path.display()
+                )
+            }
+
+            Error::InvalidBuildpackId(path, id) => {
+                write!(
+                    f,
+                    "Invalid buildpack id `{id}` in buildpack.toml\nPath: {}",
+                    path.display()
+                )
+            }
+
+            Error::InvalidBuildpackVersion(path, version) => {
+                write!(
+                    f,
+                    "Invalid buildpack version `{version}` in buildpack.toml\nPath: {}",
+                    path.display()
+                )
+            }
         }
     }
 }
