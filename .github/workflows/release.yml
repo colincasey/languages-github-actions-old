@@ -1,36 +1,83 @@
-name: Release
+name: Release Shared GitHub Actions
+
+on:
+  pull_request:
+  push:
+    branches: ["main"]
 
 permissions:
   contents: write
-
-on:
-  push:
-    branches:
-      - main
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Update Rust toolchain
+        run: rustup update
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- --deny warnings
+      - name: rustfmt
+        run: cargo fmt -- --check
+      - name: Check docs
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --all-features --document-private-items --no-deps
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Update Rust toolchain
+        run: rustup update
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
+      - name: Test
+        run: cargo test --all-features
+
+  check-bootstrap:
+    name: Check Bootstrap Script
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: lts
+          cache: npm
+      - name: Rebuild bootstrap script
+        run: npm run build
+      - name: Check bootstrap script for uncommitted changes
+        run: if [ -n "$(git status --porcelain)" ]; then exit 1; fi
+
   release:
+    name: Release / ${{ matrix.os }}
+    if: success() && github.ref == 'refs/heads/main'
+    needs:
+      - lint
+      - test
+      - check-bootstrap
     strategy:
       matrix:
         os: [macos-latest, ubuntu-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      # Setup
       - name: Checkout
         uses: actions/checkout@v3
+      - name: Update Rust toolchain
+        run: rustup update
       - name: Rust Cache
         uses: Swatinem/rust-cache@v2
-
-      # Build & Test
       - name: Build
         run: cargo build --release
-      - name: Test
-        run: cargo test --release
-
-      # Publish
       - name: Get Cargo Metadata
         id: metadata
         shell: bash
@@ -66,16 +113,8 @@ jobs:
           if [ "$OS" = "windows-latest" ]; then tar --force-local -czf "$ASSET_PATH" -C "./target/release" "$NAME"; fi
           
           echo "path=${ASSET_PATH}" >> "$GITHUB_OUTPUT"
-      - name: Check if tag is released
-        id: tag
-        shell: bash
-        env:
-          TAG: ${{ steps.metadata.outputs.version }}
-        run: |
-          echo "exists=$(git fetch --depth=1 origin "+refs/tags/${TAG}" > /dev/null 2>&1 && echo 'true' || echo 'false')" >> "$GITHUB_OUTPUT"
       - name: Create Release
         uses: softprops/action-gh-release@v1
-        if: steps.tag.outputs.exists == 'false'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
