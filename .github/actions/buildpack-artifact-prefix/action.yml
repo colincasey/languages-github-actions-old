@@ -16,4 +16,4 @@ runs:
     - name: Generate buildpack artifact prefix from id
       id: buildpack_artifact_prefix
       shell: bash
-      run: echo "value=(sed -e "s/\//_/g" <<< "${{ inputs.buildpack_id }}")" >> $GITHUB_OUTPUT
+      run: echo "value=$(sed -e "s/\//_/g" <<< "${{ inputs.buildpack_id }}")" >> $GITHUB_OUTPUT
