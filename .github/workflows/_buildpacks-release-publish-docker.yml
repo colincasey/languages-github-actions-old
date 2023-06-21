@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   publish-docker:
-    name: ${{ inputs.buildpack_id }}
+    name: Publish / Docker
     runs-on: ubuntu-latest
     steps:
       - name: Restore buildpack release artifacts
