@@ -1,4 +1,4 @@
-name: Package Buildpack
+name: Package
 
 on:
   workflow_call:
@@ -18,7 +18,7 @@ permissions:
 jobs:
   package:
     runs-on: ubuntu-latest
-    name: ${{ inputs.buildpack_id }}
+    name: Package
     steps:
       # Setup
       - name: Checkout

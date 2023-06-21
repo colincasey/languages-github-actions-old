@@ -1,4 +1,4 @@
-name: Publish / GitHub
+name: Publish → GitHub
 
 on:
   workflow_call:
@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   publish-github:
-    name: ${{ inputs.buildpack_id }}
+    name: Publish → GitHub
     runs-on: ubuntu-latest
     steps:
       - name: Restore buildpack release artifacts

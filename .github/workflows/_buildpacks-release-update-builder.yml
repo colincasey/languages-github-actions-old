@@ -21,7 +21,7 @@ permissions:
 
 jobs:
   update-builder:
-    name: ${{ inputs.buildpack_id }}
+    name: Update Builder
     runs-on: ubuntu-latest
     steps:
       - name: Restore buildpack release artifacts

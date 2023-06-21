@@ -1,4 +1,4 @@
-name: Detecting Buildpacks
+name: Detect
 
 on:
   workflow_call:
@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   detect:
-    name: Detecting Buildpacks
+    name: Detect
     runs-on: ubuntu-latest
     outputs:
       buildpacks: ${{ steps.generate-buildpack-matrix.outputs.buildpacks }}

@@ -1,4 +1,4 @@
-name: Publish / CNB Registry
+name: Publish → CNB Registry
 
 on:
   workflow_call:
@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   publish-github:
-    name: Publish CNB Registry
+    name: Publish → CNB Registry
     runs-on: ubuntu-latest
     steps:
       - name: Restore buildpack release artifacts
