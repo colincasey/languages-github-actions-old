@@ -15,29 +15,34 @@ outputs:
     value: ${{ steps.metadata.outputs.docker_repository }}
   changes_file:
     description: This content will be used in PRs and GitHub Releases created
-    value: ${{ inputs.buildpack_id }}.changes
+    value: ${{ steps.buildpack_artifact_prefix.outputs.prefix }}.changes
   cnb_file:
     description: The path to the package .cnb buildpack file
-    value: ${{ inputs.buildpack_id }}.cnb
+    value: ${{ steps.buildpack_artifact_prefix.outputs.prefix }}.cnb
   docker_image:
     description: The path to the compressed docker image
-    value: ${{ inputs.buildpack_id }}.tar.zst
+    value: ${{ steps.buildpack_artifact_prefix.outputs.prefix }}.tar.zst
 
 runs:
   using: composite
   steps:
+    - name: Get buildpack artifact prefix
+      id: buildpack_artifact_prefix
+      uses: colincasey/languages-github-actions/.github/actions/buildpack-artifact-prefix@main
+      with:
+        buildpack_id: ${{ inputs.buildpack_id }}
     - name: Restore cached assets
       uses: actions/cache/restore@v3
       with:
         key: ${{ github.run_id }}-${{ inputs.buildpack_id }}
         path: |
-          ${{ inputs.buildpack_id }}.cnb
-          ${{ inputs.buildpack_id }}.tar.zst
-          ${{ inputs.buildpack_id }}.metadata
-          ${{ inputs.buildpack_id }}.changes
+          ${{ steps.buildpack_artifact_prefix.outputs.prefix }}.cnb
+          ${{ steps.buildpack_artifact_prefix.outputs.prefix }}.tar.zst
+          ${{ steps.buildpack_artifact_prefix.outputs.prefix }}.metadata
+          ${{ steps.buildpack_artifact_prefix.outputs.prefix }}.changes
     - name: Restore buildpack metadata
       id: metadata
       shell: bash
-      run: cat ${{ inputs.buildpack_id }}.metadata >> $GITHUB_OUTPUT
+      run: cat ${{ steps.buildpack_artifact_prefix.outputs.prefix }}.metadata >> $GITHUB_OUTPUT
 
 
