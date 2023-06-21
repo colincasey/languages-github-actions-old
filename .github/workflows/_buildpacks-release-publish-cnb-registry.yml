@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   publish-github:
-    name: ${{ inputs.buildpack_id }}
+    name: Publish CNB Registry
     runs-on: ubuntu-latest
     steps:
       - name: Restore buildpack release artifacts
