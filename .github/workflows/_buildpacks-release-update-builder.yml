@@ -21,6 +21,7 @@ permissions:
 
 jobs:
   update-builder:
+    name: ${{ inputs.buildpack_id }}
     runs-on: ubuntu-latest
     steps:
       - name: Restore buildpack release artifacts
@@ -48,7 +49,7 @@ jobs:
           builders: |
             builder-22
             buildpacks-20
-            builder-classic-22"
+            builder-classic-22
 #      - name: Create Pull Request
 #        id: pr
 #        uses: peter-evans/create-pull-request@v5

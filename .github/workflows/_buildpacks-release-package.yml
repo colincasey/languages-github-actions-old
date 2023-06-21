@@ -18,7 +18,7 @@ permissions:
 jobs:
   package:
     runs-on: ubuntu-latest
-    name: Package / ${{ inputs.buildpack_id }}
+    name: ${{ inputs.buildpack_id }}
     steps:
       # Setup
       - name: Checkout
