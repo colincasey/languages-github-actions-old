@@ -39,11 +39,16 @@ runs:
         ${{ steps.generate-changelog.outputs.changelog }}
         EOF
         cat ./${{ inputs.buildpack_id }}.changes
+    - name: Move CNB and Docker image
+      shell: bash
+      run: |
+        mv ${{ inputs.cnb_file }} ${{ inputs.buildpack_id }}.cnb
+        mv ${{ inputs.docker_image }} ${{ inputs.buildpack_id }}.tar.zst
     - uses: actions/cache/save@v3
       with:
         key: ${{ github.run_id }}-${{ inputs.buildpack_id }}
         path: |
-          ${{ inputs.cnb_file }}
-          ${{ inputs.docker_image }}
+          ${{ inputs.buildpack_id }}.cnb
+          ${{ inputs.buildpack_id }}.tar.zst
           ${{ inputs.buildpack_id }}.metadata
           ${{ inputs.buildpack_id }}.changes

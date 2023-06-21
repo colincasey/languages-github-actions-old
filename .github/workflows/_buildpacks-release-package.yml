@@ -56,7 +56,7 @@ jobs:
         run: echo "value=$(yj -t < ${{ inputs.buildpack_path }}/buildpack.toml | jq -r .buildpack.version)" >> $GITHUB_OUTPUT
       - name: Read buildpack Docker repository
         id: docker_repository
-        run: echo "value=$(yj -t < ${{ inputs.buildpack_path }}/buildpack.toml | jq -r .metadata.release.docker.repository)" >> >> $GITHUB_OUTPUT
+        run: echo "value=$(yj -t < ${{ inputs.buildpack_path }}/buildpack.toml | jq -r .metadata.release.docker.repository)" >> $GITHUB_OUTPUT
       - name: Generate Changelog
         id: generate-changelog
         uses: colincasey/languages-github-actions/.github/actions/generate-changelog@main
