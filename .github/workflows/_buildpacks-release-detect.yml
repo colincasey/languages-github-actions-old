@@ -3,7 +3,9 @@ name: Detecting Buildpacks
 on:
   workflow_call:
     outputs:
-      buildpacks: ${{ jobs.detect.outputs.buildpacks }}
+      buildpacks: 
+        description: An array of (id, path) entries for each detected buildpack in JSON format
+        value: ${{ jobs.detect.outputs.buildpacks }}
 
 permissions:
   contents: read
