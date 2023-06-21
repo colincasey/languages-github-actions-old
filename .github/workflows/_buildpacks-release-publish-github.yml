@@ -7,14 +7,9 @@ on:
         required: true
         type: string
         description: The id of the buildpack to package
-    # secrets:
-    #   docker_hub_user: 
-    #     description: The username to login to Docker Hub with
-    #   docker_hub_token: 
-    #     description: The username to login to Docker Hub with
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   publish-github:
