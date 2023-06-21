@@ -41,12 +41,17 @@ runs:
         cat ./${{ inputs.buildpack_id }}.changes
     - name: Move CNB file
       shell: bash
-      if: ${{ inputs.cnb_file }} != ${{ inputs.buildpack_id }}.cnb
-      run: mv ${{ inputs.cnb_file }} ${{ inputs.buildpack_id }}.cnb
+      run: |
+        if [ "${{ inputs.cnb_file }}" != "${{ inputs.buildpack_id }}.cnb" ]; then 
+          mv ${{ inputs.cnb_file }} ${{ inputs.buildpack_id }}.cnb
+        fi
     - name: Move Docker image
       shell: bash
       if: ${{ inputs.docker_image }} != ${{ inputs.buildpack_id }}.tar.zst
-      run: mv ${{ inputs.docker_image }} ${{ inputs.buildpack_id }}.tar.zst
+      run: |
+        if [ "${{ inputs.docker_image }}" != "${{ inputs.buildpack_id }}..tar.zst" ]; then 
+          mv ${{ inputs.docker_image }} ${{ inputs.buildpack_id }}.tar.zst
+        fi
     - uses: actions/cache/save@v3
       with:
         key: ${{ github.run_id }}-${{ inputs.buildpack_id }}

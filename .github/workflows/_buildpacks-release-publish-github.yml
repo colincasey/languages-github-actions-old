@@ -1,0 +1,35 @@
+name: Publish / GitHub
+
+on:
+  workflow_call:
+    inputs:
+      buildpack_id:
+        required: true
+        type: string
+        description: The id of the buildpack to package
+    # secrets:
+    #   docker_hub_user: 
+    #     description: The username to login to Docker Hub with
+    #   docker_hub_token: 
+    #     description: The username to login to Docker Hub with
+
+permissions:
+  contents: read
+
+jobs:
+  publish-github:
+    name: Publish / GitHub / ${{ inputs.buildpack_id }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Restore buildpack release artifacts
+        id: buildpack
+        uses: colincasey/languages-github-actions/.github/actions/restore-buildpack-release@main
+        with:
+          buildpack_id: ${{ inputs.buildpack_id }}
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.buildpack.outputs.buildpack_version }}
+          body_path: ${{ steps.buildpack.outputs.changes_file }}
+          files: ${{ steps.buildpack.outputs.cnb_file }}
+          fail_on_unmatched_files: true
