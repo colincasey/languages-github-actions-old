@@ -20,8 +20,7 @@ permissions:
   contents: read
 
 jobs:
-  publish-github:
-    name: Update Builder / ${{ inputs.buildpack_id }}
+  update-builder:
     runs-on: ubuntu-latest
     steps:
       - name: Restore buildpack release artifacts

@@ -13,7 +13,6 @@ permissions:
 
 jobs:
   publish-github:
-    name: Publish / GitHub / ${{ inputs.buildpack_id }}
     runs-on: ubuntu-latest
     steps:
       - name: Restore buildpack release artifacts
