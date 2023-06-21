@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use clap::{Parser, ValueEnum};
 use indexmap::IndexMap;
 use libcnb_data::buildpack::{BuildpackId, BuildpackVersion};
-use libcnb_package::{find_buildpack_dirs, FindBuildpackDirsOptions};
+use libcnb_package::find_buildpack_dirs;
 use std::collections::{HashMap, HashSet};
 use std::fs::write;
 use std::path::{Path, PathBuf};
@@ -16,7 +16,7 @@ use uriparse::URI;
 type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about = "Bumps the version of each detected buildpack and adds an entry for any unreleased changes from the changelog", long_about = None)]
 pub(crate) struct PrepareReleaseArgs {
     #[arg(long, value_enum)]
     pub(crate) bump: BumpCoordinate,
@@ -53,12 +53,8 @@ pub(crate) fn execute(args: PrepareReleaseArgs) -> Result<()> {
         })
         .transpose()?;
 
-    let find_buildpack_dirs_options = FindBuildpackDirsOptions {
-        ignore: vec![current_dir.join("target")],
-    };
-
-    let buildpack_dirs = find_buildpack_dirs(&current_dir, &find_buildpack_dirs_options)
-        .map_err(Error::FindingBuildpacks)?;
+    let buildpack_dirs = find_buildpack_dirs(&current_dir, &[current_dir.join("target")])
+        .map_err(|e| Error::FindingBuildpacks(current_dir.clone(), e))?;
 
     if buildpack_dirs.is_empty() {
         Err(Error::NoBuildpacksFound(current_dir))?;
@@ -223,15 +219,21 @@ fn get_fixed_version(buildpack_files: &[BuildpackFile]) -> Result<BuildpackVersi
                 .map(|version| (buildpack_file.path.clone(), version))
         })
         .collect::<Result<HashMap<_, _>>>()?;
-    let versions = version_map.values().collect::<HashSet<_>>();
+
+    let versions = version_map
+        .values()
+        .map(|version| version.to_string())
+        .collect::<HashSet<_>>();
+
     if versions.len() != 1 {
-        Err(Error::NotAllVersionsMatch(version_map.clone()))?;
+        return Err(Error::NotAllVersionsMatch(version_map));
     }
-    versions
+
+    version_map
         .into_iter()
         .next()
+        .map(|(_, version)| version)
         .ok_or(Error::NoFixedVersion)
-        .map(|version| version.clone())
 }
 
 fn get_next_version(current_version: &BuildpackVersion, bump: BumpCoordinate) -> BuildpackVersion {

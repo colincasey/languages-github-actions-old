@@ -1,3 +1,4 @@
+use crate::commands::generate_buildpack_matrix::command::GenerateBuildpackMatrixArgs;
 use crate::commands::generate_changelog::command::GenerateChangelogArgs;
 use crate::commands::prepare_release::command::PrepareReleaseArgs;
 use crate::commands::update_builder::command::UpdateBuilderArgs;
@@ -15,7 +16,7 @@ const UNSPECIFIED_ERROR: i32 = 1;
 #[derive(Parser)]
 #[command(bin_name = "actions")]
 pub(crate) enum Cli {
-    GenerateBuildpackMatrix,
+    GenerateBuildpackMatrix(GenerateBuildpackMatrixArgs),
     GenerateChangelog(GenerateChangelogArgs),
     PrepareRelease(PrepareReleaseArgs),
     UpdateBuilder(UpdateBuilderArgs),
@@ -23,8 +24,8 @@ pub(crate) enum Cli {
 
 fn main() {
     match Cli::parse() {
-        Cli::GenerateBuildpackMatrix => {
-            if let Err(error) = generate_buildpack_matrix::execute() {
+        Cli::GenerateBuildpackMatrix(args) => {
+            if let Err(error) = generate_buildpack_matrix::execute(args) {
                 eprintln!("❌ {error}");
                 std::process::exit(UNSPECIFIED_ERROR);
             }

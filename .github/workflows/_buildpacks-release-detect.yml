@@ -1,0 +1,22 @@
+name: Detecting Buildpacks
+
+on:
+  workflow_call:
+    outputs:
+      buildpacks: ${{ jobs.detect.outputs.buildpacks }}
+
+permissions:
+  contents: read
+
+jobs:
+  detect:
+    name: Detecting Buildpacks
+    runs-on: ubuntu-latest
+    outputs:
+      buildpacks: ${{ steps.generate-buildpack-matrix.outputs.buildpacks }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Generate Buildpack Matrix
+        id: generate-buildpack-matrix
+        uses: heroku/languages-github-actions/.github/actions/generate-buildpack-matrix@main

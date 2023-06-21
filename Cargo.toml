@@ -12,8 +12,8 @@ name = "actions"
 path = "src/main.rs"
 
 [dependencies]
-chrono = "0.4.24"
-clap = { version = "4.2.1", default-features = false, features = [
+chrono = "0.4.26"
+clap = { version = "4.3.5", default-features = false, features = [
     "derive",
     "error-context",
     "help",
@@ -22,13 +22,13 @@ clap = { version = "4.2.1", default-features = false, features = [
 ] }
 indexmap = "1.9.3"
 lazy_static = "1.4.0"
-libcnb-data = { git = "https://github.com/heroku/libcnb.rs", branch = "ccasey-malax-pairing" }
-libcnb-package = { git = "https://github.com/heroku/libcnb.rs", branch = "ccasey-malax-pairing" }
-markdown = "1.0.0-alpha.9"
+libcnb-data = "0.13.0"
+libcnb-package = "0.13.0"
+markdown = "1.0.0-alpha.10"
 rand = "0.8.5"
 regex = "1.8.3"
-serde = { version = "1.0.145", features = ["derive"] }
-serde_json = "1.0.96"
+serde = { version = "1.0.164", features = ["derive"] }
+serde_json = "1.0.97"
 toml_edit = "0.19.10"
 uriparse = "0.6.4"
 

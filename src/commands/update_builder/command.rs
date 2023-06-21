@@ -9,7 +9,7 @@ use uriparse::URIReference;
 type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Parser, Debug)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about = "Updates all references to a buildpack in heroku/builder for the given list of builders", long_about = None)]
 pub(crate) struct UpdateBuilderArgs {
     #[arg(long)]
     pub(crate) buildpack_id: BuildpackId,
