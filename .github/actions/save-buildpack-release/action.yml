@@ -49,7 +49,7 @@ runs:
       shell: bash
       if: ${{ inputs.docker_image }} != ${{ inputs.buildpack_id }}.tar.zst
       run: |
-        if [ "${{ inputs.docker_image }}" != "${{ inputs.buildpack_id }}..tar.zst" ]; then 
+        if [ "${{ inputs.docker_image }}" != "${{ inputs.buildpack_id }}.tar.zst" ]; then 
           mv ${{ inputs.docker_image }} ${{ inputs.buildpack_id }}.tar.zst
         fi
     - uses: actions/cache/save@v3

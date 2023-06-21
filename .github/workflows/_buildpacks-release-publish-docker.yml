@@ -11,7 +11,7 @@ on:
     #   docker_hub_user: 
     #     description: The username to login to Docker Hub with
     #   docker_hub_token: 
-    #     description: The username to login to Docker Hub with
+    #     description: The token to login to Docker Hub with
 
 permissions:
   contents: read
