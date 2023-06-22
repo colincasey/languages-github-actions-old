@@ -51,7 +51,7 @@ jobs:
       - name: Save CNB File
         run: pack buildpack package ${{ steps.buildpack_artifact_prefix.outputs.prefix }}.cnb --config ${{ steps.libcnb-package.outputs.dir }}/package.toml --format file -v
       - name: Create Docker Image
-        run: pack buildpack package ${{ steps.buildpack_artifact_prefix.outputs.prefix }} --config ${{ steps.libcnb-package.outputs.dir }}/package.toml -v
+        run: pack buildpack package ${{ inputs.buildpack_id }} --config ${{ steps.libcnb-package.outputs.dir }}/package.toml -v
       - name: Save Docker Image
         run: docker save ${{ inputs.buildpack_id }} | zstd -T0 --long=31 -o ${{ steps.buildpack_artifact_prefix.outputs.prefix }}.tar.zst
 
