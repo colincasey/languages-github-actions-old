@@ -28,7 +28,7 @@ jobs:
         uses: actions/checkout@v3
       - name: Prepare
         id: prepare_release
-        uses: .github/actions/prepare_release-release@main
+        uses: ./.github/actions/prepare-release
         with:
           bump: ${{ inputs.bump }}
       - uses: tibdex/github-app-token@v1
