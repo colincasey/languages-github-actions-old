@@ -18,9 +18,6 @@ on:
         description: Private key of GitHub application (Linguist)
         required: true
 
-permissions:
-  contents: write
-
 jobs:
   prepare-release:
     name: Prepare Release
@@ -63,4 +60,4 @@ jobs:
         if: steps.pr.outputs.pull-request-operation == 'created'
         run: gh pr merge --auto --squash "${{ steps.pr.outputs.pull-request-number }}"
         env:
-          GH_TOKEN: ${{ steps.generate-token.outputs.app_token }}
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
