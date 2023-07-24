@@ -52,7 +52,7 @@ jobs:
         id: pr
         uses: peter-evans/create-pull-request@v5.0.2
         with:
-          token: ${{ steps.generate-token.outputs.app_token }}
+          token: ${{ steps.generate-token.outputs.token }}
           title: Prepare release v${{ steps.prepare.outputs.to_version }}
           commit-message: Prepare release v${{ steps.prepare.outputs.to_version }}
           branch: prepare/v${{ steps.prepare.outputs.to_version }}
